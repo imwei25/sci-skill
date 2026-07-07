@@ -149,9 +149,32 @@ if head -n 60 "$INPUT" | grep -qiE '^\s*redact_internal\s*:\s*true\b'; then
 import re, sys
 src, dst = sys.argv[1], sys.argv[2]
 lines = open(src, encoding="utf-8").read().splitlines(keepends=True)
-# Drop lines that look like internal change history / version stamps / PI attribution.
-pat = re.compile(r'(change[- ]?history|revision history|version\s*[:v]?\s*\d|변경\s*이력|수정\s*이력|버전|修订历史|变更历史|版本号|内部版本|PI\s*:|책임자\s*:|负责人\s*[:：])', re.I)
-out = [ln for ln in lines if not pat.search(ln)]
+# Drop ONLY metadata-style lines (label at line start, "Label: value" form) — never
+# match inside narrative prose. "We used version 2.1 of Bowtie" must survive; a line
+# like "Version: 3.2.1" or a "## Change History" heading must not.
+LABEL = (r'version|revision|change\s*history|revision\s*history|document\s*version|'
+         r'内部版本|版本号?|修订记录|修订历史|变更历史|变更记录|负责人|课题负责人|'
+         r'버전|변경\s*이력|수정\s*이력|책임자|'
+         r'PI|principal\s*investigator')
+# metadata line: optional markdown heading/bullet, then Label, then :/：, then value
+meta = re.compile(r'^\s*(?:#{1,6}\s*|[-*]\s*|\*\*)?(?:' + LABEL + r')\s*[:：]', re.I)
+# a heading that STARTS a change-history section (drop the heading AND its body
+# until the next heading of any level)
+hist = re.compile(r'^\s*#{1,6}\s*(?:change\s*history|revision\s*history|修订历史|变更历史|修订记录|버전\s*이력|변경\s*이력)\b', re.I)
+any_head = re.compile(r'^\s*#{1,6}\s')
+out, in_hist = [], False
+for ln in lines:
+    if in_hist:
+        if any_head.match(ln) and not hist.match(ln):
+            in_hist = False          # next section starts — stop skipping, keep this line
+        else:
+            continue                 # still inside the change-history section — drop
+    if hist.match(ln):
+        in_hist = True
+        continue
+    if meta.match(ln):
+        continue
+    out.append(ln)
 open(dst, "w", encoding="utf-8").writelines(out)
 PY
   echo "[render_pdf] redact_internal: stripped internal history/version/PI lines" >&2
