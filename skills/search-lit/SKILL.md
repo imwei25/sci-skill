@@ -25,7 +25,17 @@ never generate citations from memory alone.
 - **BibTeX output**: User-specified directory (default: current working directory)
 - **Manuscript workspace**: determined by the user or the calling skill
 
-## Search Tools: MCP (Primary) + E-utilities (Fallback)
+## 检索路径选择（先读，尤其中国大陆网络）
+
+三条路径，按当前环境自动挑：
+
+1. **claude.ai 远程 MCP**（下表）——仅当运行框架确实提供 `mcp__claude_ai_PubMed__*` 等工具时可用；Claude Code 本地 CLI、OpenCode 等**通常没有**，跳过。
+2. **Europe PMC 直连**（`references/pubmed_eutils.sh` 的 `epmc_*` 子命令，走 ebi.ac.uk）——**中国大陆可达，作为无 MCP 时的首选**。它覆盖 PubMed（`SRC:MED`），无需梯子、无 NCBI 封锁问题。
+3. **NCBI E-utilities**（同脚本的 `search/fetch/...` 子命令，走 eutils.ncbi.nlm.nih.gov）——功能最全但**大陆常被 SSL 阻断**；仅在境外/有代理时用。
+
+判定：无 MCP 工具 → 先试 Europe PMC（`epmc_search`）；确认在境外或已配代理再用 NCBI。全自动模式下，若某源连续失败就自动换下一条，不要卡住等用户。
+
+## Search Tools: MCP (Primary) + E-utilities / Europe PMC (Fallback)
 
 ### Primary: MCP Tools (Claude.ai Remote)
 
@@ -51,9 +61,17 @@ or "No such tool available" error), fall back to NCBI E-utilities via bundled sc
 PubMed calls in this session to E-utilities. Do not retry MCP after a disconnect — it
 will not recover within the same conversation.
 
-**Scripts** (in `${CLAUDE_SKILL_DIR}/references/`):
-- `pubmed_eutils.sh` — Bash wrapper for NCBI E-utilities API
+**Scripts** (in `skills/search-lit/references/` — run from repo root or use the full path):
+- `pubmed_eutils.sh` — Bash wrapper for NCBI E-utilities **and** Europe PMC (`epmc_*` commands)
 - `parse_pubmed.py` — Python parser for E-utilities responses
+
+**China-network fallback (reachable):**
+```bash
+S="skills/search-lit/references/pubmed_eutils.sh"
+bash "$S" epmc_search "sglt2 inhibitor AND heart failure" 20   # Europe PMC, JSON records
+bash "$S" epmc_cite_lookup "Bivariate analysis of sensitivity and specificity"
+bash "$S" epmc_fetch "16168343,38000001"                        # by PMIDs
+```
 
 **Usage patterns:**
 

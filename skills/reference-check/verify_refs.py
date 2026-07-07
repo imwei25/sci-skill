@@ -30,10 +30,18 @@ try:
 except ImportError:
     sys.exit("缺少 requests：请先在仓库根运行 install.ps1（Windows）/ install.sh（Linux/macOS），或让 agent 运行 env-setup 技能")
 
-UA = {"User-Agent": "sci-agent-reference-check/1.0 (mailto:research@example.com)"}
+# Contact email for Crossref/EPMC polite pools. Override with env CONTACT_EMAIL.
+_EMAIL = os.environ.get("CONTACT_EMAIL", "sci-skill@users.noreply.github.com")
+UA = {"User-Agent": f"sci-agent-reference-check/1.1 (mailto:{_EMAIL})"}
 CROSSREF = "https://api.crossref.org/works/"
 EPMC = "https://www.ebi.ac.uk/europepmc/webservices/rest/search"
 TIMEOUT = 25
+
+
+def epmc_escape(s):
+    r"""Escape Europe PMC query-syntax special chars so a title with quotes/colons
+    doesn't break the TITLE:"..." clause."""
+    return re.sub(r'(["\\:()])', r"\\\1", s or "")
 
 DOI_RE = re.compile(r"10\.\d{4,9}/[-._;()/:A-Za-z0-9]+", re.I)
 PMID_RE = re.compile(r"\bPMID:?\s*(\d{5,9})\b", re.I)
@@ -60,31 +68,54 @@ def title_sim(a, b):
     return SequenceMatcher(None, norm_title(a), norm_title(b)).ratio()
 
 
-def resolve_doi(doi):
-    """返回 (title, meta) 或 (None, None)。"""
-    doi = doi.rstrip(".,;)")
-    r = _get(CROSSREF + doi)
-    if r.status_code == 404:
-        return None, None
-    r.raise_for_status()
-    msg = r.json()["message"]
-    title = (msg.get("title") or [""])[0]
-    meta = {
-        "journal": (msg.get("container-title") or [""])[0],
-        "year": (msg.get("issued", {}).get("date-parts", [[None]])[0][0]),
-        "authors": ", ".join(a.get("family", "") for a in msg.get("author", [])[:3]),
-    }
-    return title, meta
-
-
-def resolve_pmid(pmid):
-    params = {"query": f"EXT_ID:{pmid} AND SRC:MED", "format": "json", "resultType": "core"}
+def _epmc_by_doi(doi):
+    """Europe PMC fallback for a DOI (reachable from mainland China when Crossref times out)."""
+    params = {"query": f"DOI:{epmc_escape(doi)}", "format": "json", "resultType": "core", "pageSize": 1}
     r = _get(EPMC, params=params)
     r.raise_for_status()
     res = r.json().get("resultList", {}).get("result", [])
     if not res:
         return None, None
     rec = res[0]
+    return rec.get("title", ""), {"journal": rec.get("journalTitle", ""), "year": rec.get("pubYear", ""),
+                                  "authors": rec.get("authorString", "")}
+
+
+def resolve_doi(doi):
+    """返回 (title, meta) 或 (None, None)；Crossref 失败时回退 Europe PMC。"""
+    doi = doi.rstrip(".,;)")
+    try:
+        r = _get(CROSSREF + doi)
+        if r.status_code == 404:
+            # Confirm the 404 via EPMC before trusting it — Crossref occasionally
+            # 404s a DOI it is merely slow to index.
+            t, m = _epmc_by_doi(doi)
+            return (t, m) if t else (None, None)
+        r.raise_for_status()
+        msg = r.json()["message"]
+        title = (msg.get("title") or [""])[0]
+        meta = {
+            "journal": (msg.get("container-title") or [""])[0],
+            "year": (msg.get("issued", {}).get("date-parts", [[None]])[0][0]),
+            "authors": ", ".join(a.get("family", "") for a in msg.get("author", [])[:3]),
+        }
+        return title, meta
+    except requests.RequestException:
+        # Crossref rate-limited/unreachable — try EPMC rather than falsely reporting ERROR/FABRICATED
+        return _epmc_by_doi(doi)
+
+
+def resolve_pmid(pmid):
+    # NO "AND SRC:MED": that filter hides real-but-not-yet-MEDLINE records
+    # (ahead-of-print, PMC-only, preprints) and would mislabel a real PMID as FABRICATED.
+    params = {"query": f"EXT_ID:{pmid}", "format": "json", "resultType": "core"}
+    r = _get(EPMC, params=params)
+    r.raise_for_status()
+    res = r.json().get("resultList", {}).get("result", [])
+    if not res:
+        return None, None
+    # Prefer the record whose external id actually equals the queried PMID.
+    rec = next((x for x in res if str(x.get("pmid", "")) == str(pmid)), res[0])
     meta = {"journal": rec.get("journalTitle", ""), "year": rec.get("pubYear", ""),
             "authors": rec.get("authorString", "")}
     return rec.get("title", ""), meta
@@ -92,7 +123,7 @@ def resolve_pmid(pmid):
 
 def title_search(title):
     """只有标题时，去 Europe PMC 反查是否真有这篇。返回最佳匹配 (title, sim, meta)。"""
-    params = {"query": f'TITLE:"{title}"', "format": "json", "pageSize": 3, "resultType": "core"}
+    params = {"query": f'TITLE:"{epmc_escape(title)}"', "format": "json", "pageSize": 3, "resultType": "core"}
     r = _get(EPMC, params=params)
     r.raise_for_status()
     best = (None, 0.0, None)
@@ -105,8 +136,38 @@ def title_search(title):
     return best
 
 
+def _author_year_flags(entry, meta):
+    """Cross-check claimed first-author surname + year against the resolved record.
+    Catches 'DOI is real but points to a different paper'. Returns a note fragment or ''."""
+    flags = []
+    cy = (entry.get("claimed_year") or "").strip()
+    my = str((meta or {}).get("year") or "").strip()
+    if cy and my and cy.isdigit() and my.isdigit() and abs(int(cy) - int(my)) > 1:
+        flags.append(f"年份不符(引用{cy} vs 库{my})")
+    ca = (entry.get("claimed_authors") or "").lower()
+    if ca:
+        # first author surname: bibtex "Last, First and ..." or "First Last and ..."
+        first = re.split(r"\s+and\s+", ca)[0]
+        surname = first.split(",")[0].strip() if "," in first else first.split()[-1:] and first.split()[-1]
+        surname = (surname or "").strip()
+        found_auth = (meta or {}).get("authors", "").lower()
+        if surname and len(surname) > 2 and found_auth and surname not in found_auth:
+            flags.append(f"首作者不符(引用{surname})")
+    return "；".join(flags)
+
+
+def _verdict_with_meta(v, base_note, entry, meta):
+    """Downgrade an otherwise-OK verdict to CHECK when author/year disagree."""
+    extra = _author_year_flags(entry, meta)
+    if extra and v == "OK":
+        return "CHECK", base_note + "；但" + extra + "——疑似张冠李戴，请核对"
+    if extra:
+        return v, base_note + "；另" + extra
+    return v, base_note
+
+
 def verify_one(entry):
-    """entry: {'raw','claimed_title','doi','pmid'} -> 结果 dict。"""
+    """entry: {'raw','claimed_title','doi','pmid',...} -> 结果 dict。"""
     claimed = entry.get("claimed_title", "")
     doi, pmid = entry.get("doi"), entry.get("pmid")
     try:
@@ -120,6 +181,7 @@ def verify_one(entry):
                 "MISMATCH" if sim < 0.6 else "CHECK")
             note = ("标题吻合" if v == "OK" else
                     f"DOI 存在但标题对不上(相似度{sim:.2f})——引错号或标题是编的")
+            v, note = _verdict_with_meta(v, note, entry, meta)
             return dict(verdict=v, id=f"doi:{doi}", found_title=rt, sim=round(sim, 2),
                         note=note, **entry)
         if pmid:
@@ -130,9 +192,10 @@ def verify_one(entry):
             sim = title_sim(claimed, rt) if claimed else 1.0
             v = "OK" if (not claimed or sim >= 0.85) else (
                 "MISMATCH" if sim < 0.6 else "CHECK")
+            note = "标题吻合" if v == "OK" else f"PMID 存在但标题对不上({sim:.2f})"
+            v, note = _verdict_with_meta(v, note, entry, meta)
             return dict(verdict=v, id=f"pmid:{pmid}", found_title=rt, sim=round(sim, 2),
-                        note=("标题吻合" if v == "OK" else f"PMID 存在但标题对不上({sim:.2f})"),
-                        **entry)
+                        note=note, **entry)
         # 只有标题
         if claimed:
             ft, sim, meta = title_search(claimed)
@@ -165,7 +228,9 @@ def parse_input(path, positional):
         for e in db.entries:
             entries.append({"raw": e.get("title", ""), "claimed_title": e.get("title", ""),
                             "doi": (e.get("doi") or "").strip() or None,
-                            "pmid": (e.get("pmid") or "").strip() or None})
+                            "pmid": (e.get("pmid") or "").strip() or None,
+                            "claimed_year": (e.get("year") or "").strip() or None,
+                            "claimed_authors": (e.get("author") or "").strip() or None})
     elif ext == ".ris":
         import rispy
         with open(path, encoding="utf-8") as f:

@@ -49,8 +49,11 @@ Seed id formats accepted: `DOI:10.x/...`, `PMID:123456`, bare `10.x/...`
 
 import argparse
 import json
+import os
 import re
 import sys
+import time
+import urllib.error
 import urllib.parse
 import urllib.request
 from datetime import date
@@ -90,9 +93,32 @@ def fixture_slug(seed_id: str) -> str:
 # Fetch (network or offline fixture)
 # --------------------------------------------------------------------------- #
 def _http_get_json(url: str) -> dict:
-    req = urllib.request.Request(url, headers={"User-Agent": "medsci-skills/snowball"})
-    with urllib.request.urlopen(req, timeout=30) as resp:  # noqa: S310 (trusted host)
-        return json.loads(resp.read().decode("utf-8"))
+    """GET JSON from Semantic Scholar with exponential backoff on 429.
+
+    S2's unauthenticated shared pool 429s frequently and *requires* backoff.
+    Set S2_API_KEY to raise the limit. A 429 that exhausts retries raises
+    RuntimeError so the caller reports it as a rate-limit failure rather than
+    silently counting 0 new candidates.
+    """
+    headers = {"User-Agent": "medsci-skills/snowball"}
+    api_key = os.environ.get("S2_API_KEY")
+    if api_key:
+        headers["x-api-key"] = api_key
+    delay = 2.0
+    for attempt in range(5):
+        req = urllib.request.Request(url, headers=headers)
+        try:
+            with urllib.request.urlopen(req, timeout=30) as resp:  # noqa: S310 (trusted host)
+                return json.loads(resp.read().decode("utf-8"))
+        except urllib.error.HTTPError as exc:
+            if exc.code == 429 and attempt < 4:
+                retry_after = exc.headers.get("Retry-After")
+                wait = float(retry_after) if (retry_after and str(retry_after).isdigit()) else delay
+                time.sleep(wait)
+                delay *= 2
+                continue
+            raise
+    raise RuntimeError("Semantic Scholar rate-limited (429) after retries; set S2_API_KEY or retry later")
 
 
 def fetch_direction(seed_id: str, direction: str, limit: int,
@@ -266,6 +292,8 @@ def main(argv: list[str] | None = None) -> int:
     for seed in seeds:
         for direction in directions:
             papers = fetch_direction(seed, direction, args.limit, fixture_dir)
+            if fixture_dir is None:
+                time.sleep(1.0)  # be polite to the S2 shared pool between live calls
             for paper in papers:
                 raw_found += 1
                 ext = paper.get("externalIds") or {}

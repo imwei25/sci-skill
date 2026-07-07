@@ -123,18 +123,33 @@ def classify_title_match(expected_title: str, extracted_text,
 
 
 def extract_pdf_text(path: Path, max_pages: int = 2) -> str | None:
-    """Best-effort first-page text via `pdftotext` (poppler). None if unavailable."""
-    if not shutil.which("pdftotext"):
-        return None
+    """Best-effort first-page text for the title cross-check.
+
+    Prefer PyMuPDF (``fitz``) — it ships with this skill (requirements: pymupdf),
+    so the title guard works out-of-the-box on Windows where poppler's ``pdftotext``
+    is usually absent. Falls back to ``pdftotext`` if fitz is unavailable.
+    Returns None when neither can read the file.
+    """
     try:
-        out = subprocess.run(
-            ["pdftotext", "-f", "1", "-l", str(max_pages), str(path), "-"],
-            capture_output=True, timeout=20,
-        )
-        if out.returncode == 0:
-            return out.stdout.decode("utf-8", errors="ignore")
-    except (OSError, subprocess.SubprocessError):
-        pass
+        import fitz  # PyMuPDF
+        with fitz.open(path) as doc:
+            parts = [doc[i].get_text() for i in range(min(max_pages, doc.page_count))]
+        text = "\n".join(parts).strip()
+        if text:
+            return text
+    except Exception as e:  # ImportError or any parse error -> try poppler next
+        log.debug("PyMuPDF text extraction failed for %s: %s", path, e)
+
+    if shutil.which("pdftotext"):
+        try:
+            out = subprocess.run(
+                ["pdftotext", "-f", "1", "-l", str(max_pages), str(path), "-"],
+                capture_output=True, timeout=20,
+            )
+            if out.returncode == 0:
+                return out.stdout.decode("utf-8", errors="ignore")
+        except (OSError, subprocess.SubprocessError):
+            pass
     return None
 
 
@@ -197,12 +212,29 @@ def unpaywall_lookup(doi: str, email: str) -> str | None:
 # 2. PMC (3-method fallback, JS-challenge resistant)
 # ============================================================
 
-def id_to_pmcid(identifier: str, email: str) -> str | None:
-    """Convert PMID or DOI to PMCID via NCBI ID converter."""
-    if not identifier:
-        return None
+def _pmcid_via_europepmc(identifier: str, email: str, is_pmid: bool) -> str | None:
+    """DOI/PMID -> PMCID via Europe PMC. Reachable from mainland China, unlike NCBI idconv."""
+    field = "EXT_ID" if is_pmid else "DOI"
+    query = f'{field}:"{identifier}"'
+    url = ("https://www.ebi.ac.uk/europepmc/webservices/rest/search"
+           f"?query={urllib.parse.quote(query)}&format=json&pageSize=1&resultType=core")
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": _ua(email)})
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            data = json.loads(resp.read())
+        res = data.get("resultList", {}).get("result", [])
+        if res and res[0].get("pmcid"):
+            return res[0]["pmcid"]
+    except (urllib.error.URLError, urllib.error.HTTPError, json.JSONDecodeError) as e:
+        log.debug("Europe PMC idconv error for %s: %s", identifier, e)
+    return None
+
+
+def _pmcid_via_ncbi(identifier: str, email: str) -> str | None:
+    """Convert PMID or DOI to PMCID via NCBI ID converter (often blocked from mainland China)."""
     url = (f"https://www.ncbi.nlm.nih.gov/pmc/utils/idconv/v1.0/"
-           f"?ids={urllib.parse.quote(identifier, safe='/')}&format=json")
+           f"?ids={urllib.parse.quote(identifier, safe='/')}&format=json"
+           f"&tool=sci-skill-fulltext&email={urllib.parse.quote(email)}")
     try:
         req = urllib.request.Request(url, headers={"User-Agent": _ua(email)})
         with urllib.request.urlopen(req, timeout=15) as resp:
@@ -213,6 +245,15 @@ def id_to_pmcid(identifier: str, email: str) -> str | None:
     except (urllib.error.URLError, urllib.error.HTTPError, json.JSONDecodeError) as e:
         log.debug("NCBI ID converter error for %s: %s", identifier, e)
     return None
+
+
+def id_to_pmcid(identifier: str, email: str, is_pmid: bool = False) -> str | None:
+    """Resolve a PMID or DOI to a PMCID. Try Europe PMC first (mainland-China reachable),
+    then fall back to NCBI's ID converter — so a blocked NCBI does not sink the whole PMC path."""
+    if not identifier:
+        return None
+    return (_pmcid_via_europepmc(identifier, email, is_pmid)
+            or _pmcid_via_ncbi(identifier, email))
 
 
 def download_pmc_pdf(pmcid: str, outpath: Path, email: str) -> bool:
@@ -396,9 +437,9 @@ def process_doi(doi: str, outdir: Path, email: str,
         time.sleep(0.3)
 
     # Step 2: PMC (try before slow landing-page scraping)
-    pmcid = id_to_pmcid(pmid, email) if pmid else None
+    pmcid = id_to_pmcid(pmid, email, is_pmid=True) if pmid else None
     if not pmcid:
-        pmcid = id_to_pmcid(doi, email)
+        pmcid = id_to_pmcid(doi, email, is_pmid=False)
     if pmcid and download_pmc_pdf(pmcid, outpath, email):
         return ("pmc", "pmc")
 
@@ -464,14 +505,20 @@ def build_report(records: list[dict], results: dict[str, tuple[str, str]],
             "title_match": title_match,
         })
 
-    retrieved = [i for i in items if i["status"] in RETRIEVED_STATUSES]
+    # "skip" = file already present from a previous run. Count it separately from
+    # freshly retrieved so the report and the console summary agree on every re-run.
+    fresh = [i for i in items if i["status"] in ("oa", "pmc", "arxiv")]
+    already = [i for i in items if i["status"] == "skip"]
     not_retrieved = [i for i in items if i["status"] == "fail"]
     return {
         "schema_version": REPORT_SCHEMA_VERSION,
         "generated_by": "fetch_oa.py",
         "counts": {
             "total": len(items),
-            "retrieved": len(retrieved),
+            "retrieved": len(fresh),
+            "already_present": len(already),
+            # available on disk now = freshly retrieved + already present
+            "available": len(fresh) + len(already),
             "not_retrieved": len(not_retrieved),
             "title_mismatch": sum(1 for i in items if i["title_match"] == "mismatch"),
         },

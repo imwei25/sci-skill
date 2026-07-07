@@ -25,8 +25,23 @@ except ImportError:
     sys.exit("缺少 requests：请先在仓库根运行 install.ps1（Windows）/ install.sh（Linux/macOS），或让 agent 运行 env-setup 技能")
 
 EPMC = "https://www.ebi.ac.uk/europepmc/webservices/rest/search"
-UA = {"User-Agent": "sci-agent-literature-review/1.0"}
+UA = {"User-Agent": "sci-agent-literature-review/1.1"}
 TIMEOUT = 30
+
+
+def _get(url, **kw):
+    """GET with backoff on 429/503 so a transient Europe PMC rate-limit does not
+    silently drop a whole query."""
+    kw.setdefault("headers", UA)
+    kw.setdefault("timeout", TIMEOUT)
+    r = None
+    for attempt in range(4):
+        r = requests.get(url, **kw)
+        if r.status_code in (429, 503):
+            time.sleep(2 * (attempt + 1))
+            continue
+        return r
+    return r
 
 DESIGN = [
     ("meta-analysis", r"meta-?analysis|systematic review"),
@@ -57,7 +72,7 @@ def one_query(q, limit, since):
         params = {"query": query, "format": "json",
                   "pageSize": min(100, limit - len(out)),
                   "cursorMark": cursor, "resultType": "core"}
-        r = requests.get(EPMC, params=params, headers=UA, timeout=TIMEOUT)
+        r = _get(EPMC, params=params)
         r.raise_for_status()
         d = r.json()
         batch = d.get("resultList", {}).get("result", [])
@@ -108,7 +123,12 @@ def main():
 
     if not rows:
         sys.exit("没有命中文献（检查检索式或网络）。")
-    rows.sort(key=lambda x: (str(x["year"]), x["cites"]), reverse=True)
+    def _int(v):
+        try:
+            return int(v)
+        except (TypeError, ValueError):
+            return 0
+    rows.sort(key=lambda x: (_int(x["year"]), _int(x["cites"])), reverse=True)
 
     csv_path = os.path.join(args.outdir, "evidence_table.csv")
     with open(csv_path, "w", encoding="utf-8-sig", newline="") as f:

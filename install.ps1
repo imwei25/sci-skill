@@ -125,6 +125,7 @@ if ($LASTEXITCODE -ne 0) {
 
 # 3) optional PDF toolchain
 if ($WithPdf) {
+ try {
   Write-Host "Installing pandoc + MiKTeX (for render-pdf-doc) ..." -ForegroundColor Cyan
   if (Get-Command winget -ErrorAction SilentlyContinue) {
     if (-not (Get-Command pandoc -ErrorAction SilentlyContinue)) {
@@ -152,26 +153,37 @@ if ($WithPdf) {
   } else {
     Step "PDF toolchain" $false "winget missing; install pandoc + MiKTeX manually for PDF output"
   }
+ } catch {
+   Step "PDF toolchain" $false "install step errored: $($_.Exception.Message)"
+ }
 }
 
 # 4) optional: expose skills to Claude Code
 if ($LinkClaude) {
-  $target = Join-Path $env:USERPROFILE ".claude\skills"
-  New-Item -ItemType Directory -Force $target | Out-Null
-  $n = 0
-  Get-ChildItem (Join-Path $Root "skills") -Directory | ForEach-Object {
-    $dst = Join-Path $target $_.Name
-    if (Test-Path $dst) { Remove-Item -Recurse -Force $dst }
-    Copy-Item -Recurse $_.FullName $dst
-    $n++
+  try {
+    $target = Join-Path $env:USERPROFILE ".claude\skills"
+    New-Item -ItemType Directory -Force $target | Out-Null
+    $n = 0
+    Get-ChildItem (Join-Path $Root "skills") -Directory | ForEach-Object {
+      $dst = Join-Path $target $_.Name
+      if (Test-Path $dst) { Remove-Item -Recurse -Force $dst }
+      Copy-Item -Recurse $_.FullName $dst
+      $n++
+    }
+    Step "Claude Code skills" $true "$n skills copied to $target"
+  } catch {
+    Step "Claude Code skills" $false "copy failed: $($_.Exception.Message)"
   }
-  Step "Claude Code skills" $true "$n skills copied to $target"
 }
 
 # 5) validate skills + environment
-& $Py (Join-Path $Root "scripts\validate_skills.py") --env
-if ($LASTEXITCODE -ne 0) { Step "Self-check" $false "validate_skills.py reported problems (see above)" }
-else { Step "Self-check" $true "skills + environment validated" }
+try {
+  & $Py (Join-Path $Root "scripts\validate_skills.py") --env
+  if ($LASTEXITCODE -ne 0) { Step "Self-check" $false "validate_skills.py reported problems (see above)" }
+  else { Step "Self-check" $true "skills + environment validated" }
+} catch {
+  Step "Self-check" $false "validate_skills.py could not run: $($_.Exception.Message)"
+}
 
 # 6) summary - never print a green Done when something failed
 $failed = @($Steps | Where-Object { -not $_.OK })

@@ -108,6 +108,19 @@ def _extract_authors(author_list_el):
     return bib_authors, display_authors, first_author_last, suspicions, has_collective_only
 
 
+def _extract_doi(article_el, art_el) -> str:
+    """DOI from Article/ELocationID first, then PubmedData/ArticleIdList fallback.
+    Many PubMed records carry the DOI only in ArticleIdList, so the ELocationID-only
+    path used to drop it (downgrading verified_by from pubmed+crossref to pubmed)."""
+    for aid in art_el.findall("ELocationID"):
+        if aid.get("EIdType") == "doi" and aid.text:
+            return aid.text.strip()
+    for aid in article_el.findall("PubmedData/ArticleIdList/ArticleId"):
+        if aid.get("IdType") == "doi" and aid.text:
+            return aid.text.strip()
+    return ""
+
+
 def parse_esearch(data: str) -> None:
     """Parse esearch JSON response, print PMIDs and count."""
     result = json.loads(data)
@@ -129,8 +142,8 @@ def parse_esummary(data: str) -> None:
         print("No results found.")
         return
 
-    print("| # | PMID | Year | Journal | Title | Authors |")
-    print("|---|------|------|---------|-------|---------|")
+    print("| # | PMID | DOI | Year | Journal | Title | Authors |")
+    print("|---|------|-----|------|---------|-------|---------|")
 
     for i, uid in enumerate(uids, 1):
         doc = docs.get(uid, {})
@@ -149,7 +162,7 @@ def parse_esummary(data: str) -> None:
         doi_list = doc.get("articleids", [])
         doi = next((d["value"] for d in doi_list if d.get("idtype") == "doi"), "")
 
-        print(f"| {i} | {uid} | {year} | {journal} | {title} | {authors} |")
+        print(f"| {i} | {uid} | {doi or '—'} | {year} | {journal} | {title} | {authors} |")
 
     print(f"\n*{len(uids)} articles retrieved*")
 
@@ -193,10 +206,7 @@ def parse_efetch(data: str) -> None:
         _, authors, _, suspicions, _ = _extract_authors(author_list)
 
         # DOI
-        doi = ""
-        for aid in art.findall("ELocationID"):
-            if aid.get("EIdType") == "doi":
-                doi = aid.text or ""
+        doi = _extract_doi(article, art)
 
         # Abstract
         abstract_el = art.find("Abstract")
@@ -252,10 +262,7 @@ def generate_bibtex(data: str) -> None:
         issue = ji.findtext("Issue", "") if ji is not None else ""
         pages = art.findtext("Pagination/MedlinePgn", "")
 
-        doi = ""
-        for aid in art.findall("ELocationID"):
-            if aid.get("EIdType") == "doi":
-                doi = aid.text or ""
+        doi = _extract_doi(article, art)
 
         author_list = art.find("AuthorList")
         bib_authors, _, first_author_last, suspicions, has_collective_only = \

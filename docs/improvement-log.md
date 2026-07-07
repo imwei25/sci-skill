@@ -47,3 +47,19 @@
 **修复**：重写解析器支持折叠块/块标量；校验 name（≤64、a-z0-9-、不以连字符开头结尾、与目录一致）与 description（非空、≤1024，超限报错）；非规范字段（triggers/tools/model/version/author）警告；新增 `--env` 模式——检查 Python≥3.10、按能力组 import 全部关键依赖、探测 pandoc/xelatex（含 MiKTeX 默认安装位置），按"数据分析/文献检索/全文下载/文档生成/PDF 排版"输出人话结论。安装脚本收尾改调 `validate_skills.py --env`。
 
 **已知遗留**：校验器现在会如实报出 nature-figure description 超长错误，该问题在 F6 批次修复。
+
+**验证**：独立 agent 逐行审查 + 实测两模式运行，结论 PASS；提了一个非阻断建议（install.ps1 后段 cmdlet 缺 try/catch，异常会裸崩而非走汇总）——已在 F4 顺带加固。
+
+### F4 · 文献链代码修复（已完成，均经实测）
+
+1. **引号注入 / 静默失败**（`search-lit/references/pubmed_eutils.sh:52`）：query 曾通过 shell 拼进 `python3 -c` 字符串，含单引号的检索式静默失败、含 `$()` 可命令注入。改用 `curl -G --data-urlencode`，query 永远是数据不是代码。实测：含单引号检索式正常返回、注入串被当纯文本。
+2. **Europe PMC 回退**（同脚本）：新增 `epmc_search` / `epmc_cite_lookup` / `epmc_fetch` 三个走 ebi.ac.uk 的子命令（大陆可达），SKILL.md 把「无 MCP → 先 Europe PMC，NCBI 仅境外/代理时用」写成明确路由。`_curl` 捕获 curl 退出码、输出结构化错误 JSON，不再让 `set -e` 中途裸退（去掉 `-e`）。实测 EPMC 检索命中真实文献。
+3. **假阳性根治**（`reference-check/verify_refs.py:81`）：`resolve_pmid` 去掉 `AND SRC:MED`——该过滤会把真实但未进 MEDLINE 的 PMID（在版/仅 PMC/预印本）误判为 FABRICATED。实测真实 PMID 现在正确判 OK。另加：DOI 路径 Crossref 失败/404 时回退 Europe PMC；标题查询转义引号；新增首作者姓氏+年份交叉核验（抓「DOI 真但张冠李戴」，OK→CHECK）；UA 邮箱可用 `CONTACT_EMAIL` 覆盖。
+4. **PMC 分支国内可用**（`fulltext-retrieval/fetch_oa.py`）：DOI/PMID→PMCID 改为「先 Europe PMC，后 NCBI idconv」，NCBI 被墙不再拖垮整个 PMC 路径；idconv 补 `tool`/`email` 参数。
+5. **标题核验换 PyMuPDF**（同文件 `extract_pdf_text`）：从依赖外部 poppler `pdftotext`（Windows 默认没有）改为优先用已装的 `fitz`，poppler 仅作次选——Windows 上「防下错 PDF」护栏终于生效。
+6. **报告计数口径统一**（同文件 `build_report`）：`skip`（已存在文件）从 `retrieved` 拆出，新增 `already_present` / `available` 字段，重复跑时报告与摘要不再打架。
+7. **snowball 限流**（`search-lit/references/snowball.py`）：`_http_get_json` 加 429 指数退避 + `Retry-After` + `S2_API_KEY` 支持，退避耗尽抛 RuntimeError（不再把限流静默当「0 新增候选」）；实时调用间 sleep 1s。
+8. **literature-review 韧性**（`search.py`）：裸 `requests.get` 换成带 429/503 退避的 `_get`；排序键改数值型（原 `str(year)` 字符串比较语义脏）。实测检索正常。
+9. **parse_pubmed DOI**：esummary 表补 DOI 列（原算出不输出）；efetch/bibtex 的 DOI 抽取加 `PubmedData/ArticleIdList` 兜底（原只取 ELocationID 会漏，导致 verified_by 降级）。
+
+**影响文件**：skills/search-lit/references/{pubmed_eutils.sh, snowball.py, parse_pubmed.py}、skills/search-lit/SKILL.md、skills/reference-check/verify_refs.py、skills/fulltext-retrieval/fetch_oa.py、skills/literature-review/search.py。
