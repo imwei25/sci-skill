@@ -25,8 +25,10 @@ try:
 except Exception:
     pass
 
-# 数字：整数/小数/百分比/带千分位；不含纯年份误报太多，保留但单列
-NUM_RE = re.compile(r"(?<![\w.])[-+]?\d[\d,]*(?:\.\d+)?%?")
+# 数字：整数/小数/百分比/带千分位。
+# 边界用 ASCII 类而非 \w——Python 的 \w 把中文汉字也算词字符，会导致"共45名"这种
+# 中文无空格写法里的数字被 lookbehind 挡掉、漏抓（假阴性，比误报更危险）。
+NUM_RE = re.compile(r"(?<![0-9A-Za-z.])[-+]?\d[\d,]*(?:\.\d+)?%?(?![0-9A-Za-z])")
 # 引用标记：[n]、[1,2]、[1-3]
 BRACKET_CITE_RE = re.compile(r"\[\d+(?:\s*[-,]\s*\d+)*\]")
 # (Author, 2024) / (Author et al., 2024)
