@@ -5,9 +5,8 @@ description: >
   Targets non-bibliography artifacts: research proposals, IRB cover letters, briefing
   handouts, anchor docs (Q&A grids), and reference tables. Auto-infers pipe-table column
   widths from content (label column shrinks to fit, data columns share remaining width).
-  CJK-aware font fallback for Korean text (Apple SD Gothic Neo on macOS, Noto Sans CJK KR on Linux).
-  NOT for: manuscripts with bibliography (use /manage-refs render_pandoc.sh), Word form
-  filling (/fill-protocol), figures (/make-figures).
+  CJK-aware font fallback: Chinese (Microsoft YaHei / Noto Sans CJK SC) and Korean (Apple SD Gothic Neo / Noto Sans CJK KR).
+  NOT for: verifying citations (use the reference-check skill) or figures/plots (use the nature-figure skill).
 triggers: render PDF, PDF 렌더, korean PDF, 한글 PDF, anchor doc PDF, briefing PDF, proposal PDF, 연구계획서 PDF, 표 정렬 PDF, 표 폭 자동, tbl-colwidths, 학술 PDF
 tools: Read, Write, Edit, Bash, Grep, Glob
 model: inherit
@@ -25,17 +24,16 @@ In real circulation cycles for academic PDFs, two recurring failure patterns app
 1. v1 drafts: change-history, version numbers, and PI attribution leak into the attached PDF, confusing the first recipient.
 2. v2 drafts: pandoc pipe-table dash ratios are misjudged, narrowing the first column and forcing label wrapping that hurts readability.
 
-Manual fixes work but the same pattern recurs across proposals, briefings, IRB covers, exemption applications. This skill focuses on **layout** (CJK fonts + table column widths). Bibliography and CSL are handled by `/manage-refs`.
+Manual fixes work but the same pattern recurs across proposals, briefings, IRB covers, exemption applications. This skill focuses on **layout** (CJK fonts + table column widths).
 
-## Boundary (separation from other skills)
+## Boundary (separation from other skills in this repo)
 
 | Task | Skill |
 |---|---|
-| Manuscript + bibliography → DOCX/PDF | `/manage-refs scripts/render_pandoc.sh` (CSL + .bib) |
-| Filling an institutional .docx form | `/fill-protocol` |
-| ICMJE COI form | `/fill-icmje-coi` |
-| Figure / PPTX | `/make-figures`, `/present-paper` |
-| **This skill**: non-bib academic markdown → PDF (proposal, briefing, anchor doc, IRB cover) | `/render-pdf-doc` |
+| Verify the document's citations | `reference-check` |
+| Figures / scientific plots | `nature-figure` |
+| Draft the proposal / review / report text | `grant-proposal` / `literature-review` / `deep-research` |
+| **This skill**: academic markdown → publication-quality PDF | `render-pdf-doc` |
 
 ## Core Principles
 
@@ -179,6 +177,6 @@ Each template marks slots with a `<!-- TODO: -->` marker.
 
 ## Anti-Hallucination
 
-- Numerical content in tables: apply `~/.claude/rules/numerical-safety.md`. Read from CSV.
-- References: use `/manage-refs` separately — this skill does not handle bib.
-- When producing a circulation PDF, apply `~/.claude/rules/senior-mentor-circulation.md` (preserve the primary source) + `~/.claude/rules/ai-drafted-document-policy.md`.
+- **Numerical content in tables**: read numbers from the source CSV/data file — never retype or invent values.
+- **Citations**: this skill only lays out the document; verify references with the `reference-check` skill separately.
+- **Circulation PDFs**: preserve the primary source; do not fabricate authorship, dates, or approvals. If `redact_internal: true` is set in frontmatter, keep change history / version numbers / PI attribution out of the body (see Core Principle 3 — the render script honors this flag as of the F6 fix).

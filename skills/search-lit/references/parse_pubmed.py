@@ -299,7 +299,7 @@ def generate_bibtex(data: str) -> None:
         # Anti-hallucination verification flag. Entries emitted by this script
         # originate from PubMed efetch XML, so a non-empty PMID is proof of
         # API provenance (verified=true). Missing PMID → verified=false and
-        # downstream tooling (/verify-refs) will flag for manual check.
+        # the downstream reference-check skill will flag for manual check.
         verified = bool(pmid)
         verified_by = "pubmed+crossref" if (pmid and doi) else ("pubmed" if pmid else "")
         print(f"  verified  = {{{'true' if verified else 'false'}}},")

@@ -130,9 +130,8 @@ are hard-coded or leave your Zotero client**. The no-code equivalent is right-cl
 "Find Available PDF".
 
 This path is **user-initiated** and depends on your live Zotero session, so its results
-are recorded manually (not reproducible CI evidence). `/lit-sync` Phase 2.7 orchestrates
-both routes (disk OA via this script + in-library via the snippet) and reconciles them in
-a report.
+are recorded manually. Run the two routes yourself when needed: disk OA via `fetch_oa.py`
+here, plus the in-library `find_available_pdf.js` snippet inside Zotero.
 
 ## Requirements
 

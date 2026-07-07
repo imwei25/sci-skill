@@ -76,8 +76,8 @@ bash "$S" epmc_fetch "16168343,38000001"                        # by PMIDs
 **Usage patterns:**
 
 ```bash
-EUTILS="${CLAUDE_SKILL_DIR}/references/pubmed_eutils.sh"
-PARSER="${CLAUDE_SKILL_DIR}/references/parse_pubmed.py"
+EUTILS="skills/search-lit/references/pubmed_eutils.sh"
+PARSER="skills/search-lit/references/parse_pubmed.py"
 
 # Search PubMed (returns PMIDs)
 bash "$EUTILS" search "diagnostic test accuracy meta-analysis radiology" 20 \
@@ -165,31 +165,27 @@ API; nothing generated from memory):
 
 ```bash
 # Expand seed DOIs/PMIDs in all directions, dedup against the existing pool,
-# append verified candidates to references/library.bib
+# append verified candidates to outputs/refs.bib
 python3 references/snowball.py \
   --seed DOI:10.1148/radiol.2024123,PMID:38000001 \
   --direction all \
-  --pool references/library.bib \
-  --out references/library.bib
+  --pool outputs/refs.bib \
+  --out outputs/refs.bib
 ```
 
 - **Directions**: `backward` (references the seeds cite), `forward` (papers
   citing the seeds), `similar` (S2 recommendations), or `all` (default).
-- **Dedup**: against the current `references/library.bib` by DOI and
+- **Dedup**: against the current `outputs/refs.bib` by DOI and
   normalized title, and within the harvested set.
 - **Trust flag**: snowball candidates are written `verified=false` +
   `verified_by=semantic_scholar`. They are candidates, not confirmed
-  citations — run `/verify-refs` (or Phase 4 verification) to confirm each
+  citations — run `reference-check` 技能 (or Phase 4 verification) to confirm each
   against PubMed/CrossRef before citing.
-- **Output contract**: appends to `references/library.bib` only. NEVER writes
-  `manuscript/_src/refs.bib` (the script hard-refuses that path).
+- **Output contract**: appends to `outputs/refs.bib` only (the candidate pool).
 - **PRISMA line**: the script prints, e.g., `Records identified through
   citation searching (snowballing): N raw (backward=…, forward=…, similar=…);
   after dedup against existing pool: M new candidates.` — record M in the
   PRISMA flow's citation-searching box.
-
-A deterministic, network-free challenge card (recorded fixtures + expected
-output + `verify.sh`) lives in `references/snowball_challenge/`.
 
 ### Phase 3: Deep Read
 
@@ -231,8 +227,8 @@ This is the most critical part of the skill. Follow these rules without exceptio
 #### BibTeX Generation
 
 For each reference (verified or not), generate a BibTeX entry with an explicit
-`verified` flag so downstream skills (`/lit-sync`, `/verify-refs`,
-`/write-paper`) can reason about trust without re-running verification:
+`verified` flag so the downstream `reference-check` skill (and any later writing step)
+can reason about trust without re-running verification:
 
 ```bibtex
 @article{FirstAuthorLastName_Year_ShortKey,
@@ -255,9 +251,9 @@ For each reference (verified or not), generate a BibTeX entry with an explicit
 
 | Value | Meaning | Downstream behavior |
 |---|---|---|
-| `true` | DOI or PMID confirmed via PubMed/CrossRef; title, authors, year all match | Safe to cite; `/write-paper` citekey-only gate passes |
-| `false` | Parsed from text but API lookup failed or returned mismatch | `/verify-refs` flags as UNVERIFIED; manuscript MUST show `[UNVERIFIED - NEEDS MANUAL CHECK]` |
-| `manual` | User explicitly added despite lookup failure | Treated as verified=false by `/verify-refs` but suppresses repeat warnings |
+| `true` | DOI or PMID confirmed via PubMed/CrossRef; title, authors, year all match | Safe to cite |
+| `false` | Parsed from text but API lookup failed or returned mismatch | `reference-check` 技能 flags as UNVERIFIED; manuscript MUST show `[UNVERIFIED - NEEDS MANUAL CHECK]` |
+| `manual` | User explicitly added despite lookup failure | Treated as verified=false by `reference-check` 技能 but suppresses repeat warnings |
 
 `verified_by` lists the data sources that confirmed the entry (e.g., `pubmed`,
 `crossref`, `semantic_scholar`, or a combination). `verified_on` is the ISO date
@@ -268,9 +264,7 @@ of the most recent successful verification.
 #### Output
 
 1. Save BibTeX entries to the specified .bib file (append, do not overwrite).
-   Target: `references/library.bib` (candidate pool for `/lit-sync` to import
-   into Zotero). NEVER write to `manuscript/_src/refs.bib` — that is `/lit-sync`'s
-   sole-writer path per `docs/artifact_contract.md`.
+   Target: `outputs/refs.bib` (the candidate pool; the user can import it into Zotero/EndNote).
 2. Print a summary of all references with verification status:
 
 ```
@@ -302,16 +296,17 @@ home of the open-access cascade (arXiv → Unpaywall → PMC → OpenAlex → Cr
 page, each validated with a `%PDF-` header + ≥10 KB size). Do **not** re-implement OA
 fetching here.
 
-Pass the verified candidate DOIs from `references/library.bib`:
+Pass the verified candidate DOIs from `outputs/refs.bib`:
 
 ```bash
-ENGINE="${MEDSCI_SKILLS_ROOT:-$HOME/workspace/medsci-skills}/skills/fulltext-retrieval/fetch_oa.py"
-# extract DOIs from references/library.bib → dois.txt (one per line)
+ENGINE="skills/fulltext-retrieval/fetch_oa.py"
+# extract DOIs from outputs/refs.bib → dois.txt (one per line)
 python3 "$ENGINE" dois.txt -o pdfs/ -e <contact-email> --report pdfs/retrieval_report.json
 ```
 
-For Zotero-resident PDFs and higher-yield, proxy-aware retrieval, use `/lit-sync` Phase 2.7,
-which also invokes `/fulltext-retrieval` and triggers Zotero's native "Find Available PDF".
+For Zotero-resident PDFs and higher-yield, proxy-aware retrieval, run the
+`fulltext-retrieval` skill's `references/find_available_pdf.js` snippet inside Zotero
+to trigger its native "Find Available PDF".
 
 #### Alternative sources (legitimate only)
 
@@ -326,7 +321,7 @@ PDF mirrors. Rate limits and PDF validation are handled inside `/fulltext-retrie
 
 ### Phase 6: Gap Analysis
 
-When called during manuscript writing (especially by `/write-paper` Phase 7):
+When called during manuscript or review writing:
 
 1. **Read the manuscript** to extract all inline citations.
 2. **Compare** cited references against the search results.
@@ -342,9 +337,8 @@ When called during manuscript writing (especially by `/write-paper` Phase 7):
 
 ### Mode: Manuscript Paper Reference Pool
 
-For supplying a manuscript's reference pool — typically invoked by `/write-paper` Step 7.3c (or
-`/self-review` Phase 2.5c-2) when the **reference adequacy** gate finds the draft under target or a
-named method uncited, but usable directly when building out an original-research bibliography.
+For supplying a manuscript's reference pool — useful when the draft is under its reference target
+or a named method is uncited, and directly when building out an original-research bibliography.
 
 This mode is deliberately **broad**: for an original-research article, return **25–40** verified
 candidates, not the ~10 a quick search settles on. Do not stop early unless the field is genuinely
@@ -367,11 +361,9 @@ are all covered:
 For each candidate, report: **PMID/DOI**, **verification status**, **candidate category**, the
 **target manuscript section** it belongs in, and a one-line **why it is needed**.
 
-Boundary (unchanged): every entry is API-verified before inclusion, and BibTeX is appended **only**
-to `references/library.bib` — the candidate pool for `/lit-sync` to import into Zotero. **Never**
-write to `manuscript/_src/refs.bib`; that SSOT belongs to `/lit-sync`. This mode produces
-candidates; it does not decide inclusion (the user does) and it does not insert references into the
-manuscript bib.
+Boundary: every entry is API-verified before inclusion, and BibTeX is appended **only**
+to `outputs/refs.bib` — the candidate pool. This mode produces candidates; it does not
+decide inclusion (the user does) and it does not insert references into any manuscript.
 
 ### Mode: Systematic Search
 
@@ -404,7 +396,7 @@ For expanding from a known paper:
 For a **structured, dedup-aware, PRISMA-countable** expansion (backward +
 forward + similar) prefer **Phase 2.5: Citation Searching** with
 `references/snowball.py`, which appends verified candidates to
-`references/library.bib` and reports a citation-searching count.
+`outputs/refs.bib` and reports a citation-searching count.
 
 ### Mode: Embase Browser Automation
 
@@ -455,6 +447,6 @@ Embase has no public API. Use Chrome browser automation (MCP) to search and expo
 ## What This Skill Does NOT Do
 
 - Does not download from paywalled journals without user-provided credentials or institutional access.
-- Does not assess the quality of evidence (use `/analyze-stats` or `/check-reporting` for that).
-- Does not write the literature review text (use `/write-paper` for that).
+- Does not assess the quality of evidence (use the `data-analysis` or `peer-review` skill for that).
+- Does not write the review text itself (use the `literature-review` skill for that).
 - Does not fabricate any part of a citation.

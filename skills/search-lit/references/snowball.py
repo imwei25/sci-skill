@@ -20,21 +20,20 @@ Data source: Semantic Scholar Graph API (deterministic, no model memory).
 Anti-hallucination contract
 ---------------------------
 Snowball candidates carry `verified=false` + `verified_by=semantic_scholar`.
-They are NOT cross-checked against PubMed/CrossRef here; downstream
-`/verify-refs` confirms each entry and upgrades the flag. Nothing is ever
-generated from memory.
+They are NOT cross-checked against PubMed/CrossRef here; the downstream
+reference-check skill confirms each entry and upgrades the flag. Nothing is
+ever generated from memory.
 
 Output contract (matches search-lit BibTeX section)
 ---------------------------------------------------
-- BibTeX is APPENDED to the candidate pool (default references/library.bib).
-- NEVER writes to manuscript/_src/refs.bib (that is /lit-sync's sole path).
+- BibTeX is APPENDED to the candidate pool (default outputs/refs.bib).
 - A PRISMA "records identified through citation searching" line is printed.
 
 Usage
 -----
     # Live (network) — expand one DOI in all directions, dedup against pool
     python3 snowball.py --seed DOI:10.1148/radiol.2024123 \
-        --pool references/library.bib --out references/library.bib
+        --pool outputs/refs.bib --out outputs/refs.bib
 
     # Multiple seeds from a file (one id per line), backward only
     python3 snowball.py --seed @seeds.txt --direction backward
@@ -111,14 +110,18 @@ def _http_get_json(url: str) -> dict:
             with urllib.request.urlopen(req, timeout=30) as resp:  # noqa: S310 (trusted host)
                 return json.loads(resp.read().decode("utf-8"))
         except urllib.error.HTTPError as exc:
-            if exc.code == 429 and attempt < 4:
-                retry_after = exc.headers.get("Retry-After")
-                wait = float(retry_after) if (retry_after and str(retry_after).isdigit()) else delay
-                time.sleep(wait)
-                delay *= 2
-                continue
+            if exc.code == 429:
+                if attempt < 4:
+                    retry_after = exc.headers.get("Retry-After")
+                    wait = float(retry_after) if (retry_after and str(retry_after).isdigit()) else delay
+                    time.sleep(wait)
+                    delay *= 2
+                    continue
+                raise RuntimeError(
+                    "Semantic Scholar rate-limited (429) after retries; set S2_API_KEY or retry later"
+                ) from exc
             raise
-    raise RuntimeError("Semantic Scholar rate-limited (429) after retries; set S2_API_KEY or retry later")
+    raise RuntimeError("Semantic Scholar request did not complete")
 
 
 def fetch_direction(seed_id: str, direction: str, limit: int,
@@ -260,9 +263,9 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--direction", default="all",
                     choices=("all", *DIRECTIONS))
     ap.add_argument("--pool", default=None,
-                    help="existing library.bib to dedup against")
-    ap.add_argument("--out", default="references/library.bib",
-                    help="BibTeX append target (NEVER manuscript/_src/refs.bib)")
+                    help="existing candidate .bib to dedup against")
+    ap.add_argument("--out", default="outputs/refs.bib",
+                    help="BibTeX append target (candidate pool)")
     ap.add_argument("--limit", type=int, default=50, help="max per seed per direction")
     ap.add_argument("--offline-fixture", default=None,
                     help="dir of recorded JSON (<slug>.<direction>.json) for deterministic runs")
@@ -273,8 +276,6 @@ def main(argv: list[str] | None = None) -> int:
     args = ap.parse_args(argv)
 
     out_path = Path(args.out)
-    if out_path.name == "refs.bib" and "_src" in str(out_path):
-        ap.error("refusing to write manuscript/_src/refs.bib — that is /lit-sync's sole path")
 
     fixture_dir = Path(args.offline_fixture) if args.offline_fixture else None
     pool_dois, pool_titles = parse_pool_keys(Path(args.pool) if args.pool else None)

@@ -63,3 +63,20 @@
 9. **parse_pubmed DOI**：esummary 表补 DOI 列（原算出不输出）；efetch/bibtex 的 DOI 抽取加 `PubmedData/ArticleIdList` 兜底（原只取 ELocationID 会漏，导致 verified_by 降级）。
 
 **影响文件**：skills/search-lit/references/{pubmed_eutils.sh, snowball.py, parse_pubmed.py}、skills/search-lit/SKILL.md、skills/reference-check/verify_refs.py、skills/fulltext-retrieval/fetch_oa.py、skills/literature-review/search.py。
+
+**验证**：独立 agent 逐行审查+实测，结论基本 PASS，抓出 1 处关键缺陷——`fetch_oa.py:657` 标题核验门槛只认 `pdftotext`、没跟着改认 `fitz`，导致 PyMuPDF 改动在目标环境（仅装 pymupdf）下不生效。已修：门槛改为「fitz 可导入 或 pdftotext 存在」。另修 snowball 429 耗尽路径的死代码（RuntimeError 现可达）。
+
+### F5 · 全仓死引用清理（已完成）
+
+vendored 技能大量引用本仓库不存在的东西，会让 agent 照着撞空或调不存在的技能。清理约 60 处：
+
+- **路径/token 级**（sed 批量）：`${CLAUDE_SKILL_DIR}/references/` → `skills/search-lit/references/`；`references/library.bib` → `outputs/refs.bib`；`${MEDSCI_SKILLS_ROOT:-...}/...fetch_oa.py` → `skills/fulltext-retrieval/fetch_oa.py`。
+- **跨仓库幽灵技能** → 本仓库真实技能：`/verify-refs` → reference-check；`/analyze-stats`/`/check-reporting` → data-analysis/peer-review；`/make-figures`/`/present-paper` → nature-figure；`/manage-refs` → render-pdf-doc/reference-check；`/lit-sync`/`/write-paper`/`/self-review` 及其"SSOT refs.bib"契约、`manuscript/_src/refs.bib`、`docs/artifact_contract.md`、`snowball_challenge/`、`fetch_oa_report_challenge/`、`~/.claude/rules/*.md` → 删除或改为自包含说明。
+- **skill.yml**：search-lit / fulltext-retrieval / render-pdf-doc 三个 skill.yml 的 when_NOT_to_use / downstream_consumers / forbidden_actions / validation_commands 全部改指本仓库真实技能，删掉指向不存在夹具的 validation_commands。
+- snowball.py 删掉对 `manuscript/_src/refs.bib` 的硬拒写守卫（该路径概念已不存在），默认输出改 `outputs/refs.bib`。
+
+清理后全仓 dead-ref sweep：0 处活引用（仅剩历史日志 docs/ 里作为"修复前问题"的描述性文字）。
+
+### 待办（后续批次）
+- **F6**：nature-figure description 压到 1024 内 + 顶部后端矛盾统一 + assets 死链；render-pdf-doc 中文默认字体（Malgun→YaHei 自动探测）+ `-V` 覆盖 frontmatter + redact_internal 实现/删除。
+- **内容批**：grant-proposal 三处事实错误 + AI 合规；peer-review 评审框架/报告规范/保密；humanize 中文 AI 腔清单；data-analysis 统计护栏；description 消歧。

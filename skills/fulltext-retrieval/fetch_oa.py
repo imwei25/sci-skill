@@ -651,10 +651,19 @@ def main():
         print(labels[status])
         time.sleep(0.5)
 
-    # Best-effort title cross-check on successful downloads (needs pdftotext).
+    # Best-effort title cross-check on successful downloads. extract_pdf_text uses
+    # PyMuPDF (installed) and falls back to pdftotext, so gate on either being available
+    # rather than on poppler alone (which Windows usually lacks).
+    def _pdf_text_available():
+        try:
+            import fitz  # noqa: F401
+            return True
+        except Exception:
+            return bool(shutil.which("pdftotext"))
+
     extracted: dict[str, str] = {}
     have_titles = any(r.get("title") for r in records)
-    if have_titles and shutil.which("pdftotext"):
+    if have_titles and _pdf_text_available():
         for rec in records:
             doi = rec["doi"]
             if not rec.get("title"):
