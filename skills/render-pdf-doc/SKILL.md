@@ -7,6 +7,7 @@ description: >
   widths from content (label column shrinks to fit, data columns share remaining width).
   CJK-aware font fallback: Chinese (Microsoft YaHei / Noto Sans CJK SC) and Korean (Apple SD Gothic Neo / Noto Sans CJK KR).
   NOT for: verifying citations (use the reference-check skill) or figures/plots (use the nature-figure skill).
+  For Word (.docx) submission use render-docx; if the user just says "排版/typeset" without a format, ask PDF vs Word first.
 triggers: render PDF, PDF 렌더, korean PDF, 한글 PDF, anchor doc PDF, briefing PDF, proposal PDF, 연구계획서 PDF, 표 정렬 PDF, 표 폭 자동, tbl-colwidths, 학술 PDF
 tools: Read, Write, Edit, Bash, Grep, Glob
 model: inherit

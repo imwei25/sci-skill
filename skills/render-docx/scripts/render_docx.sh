@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # render_docx.sh — Markdown → Word (.docx) via pandoc, for journal submission.
 #
-# Word is what most medical journals actually accept for submission, and unlike the
-# xelatex PDF path it does NOT silently drop CJK glyphs (Word stores UTF-8 text and
-# renders with a system font), so Chinese "just works".
+# Word is what most medical journals actually accept for submission, and it is much
+# less prone than the xelatex PDF path to silently dropping CJK glyphs (Word stores
+# UTF-8 text and auto-substitutes a system font), so Chinese generally "just works".
 #
 # Usage:
 #   render_docx.sh -i input.md [-o output.docx]
@@ -34,13 +34,20 @@ while [[ $# -gt 0 ]]; do
     --bib) BIB="$2"; shift 2 ;;
     -h|--help) usage ;;
     --) shift; EXTRA=("$@"); break ;;
+    -*) echo "ERROR: unknown option '$1' (put pandoc pass-through args after '--')" >&2; usage ;;
     *) EXTRA+=("$1"); shift ;;
   esac
 done
 
 [[ -z "$INPUT" ]] && usage
 [[ -f "$INPUT" ]] || { echo "ERROR: input not found: $INPUT" >&2; exit 2; }
-[[ -z "$OUTPUT" ]] && OUTPUT="${INPUT%.md}.docx"
+# strip the last extension (handles .md/.markdown/.MD), not just a literal .md
+[[ -z "$OUTPUT" ]] && OUTPUT="${INPUT%.*}.docx"
+# --csl and --bib must come as a pair (citeproc needs a bibliography)
+if [[ -n "$CSL" && -z "$BIB" ]] || [[ -z "$CSL" && -n "$BIB" ]]; then
+  echo "ERROR: --csl and --bib must be used together (citeproc needs both a style and a bibliography)" >&2
+  exit 1
+fi
 
 if ! command -v pandoc >/dev/null 2>&1; then
   echo "ERROR: pandoc not installed. Install it: install.ps1 -WithPdf / install.sh --with-pdf" >&2
