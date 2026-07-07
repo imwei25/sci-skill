@@ -53,7 +53,16 @@ def fmt_p(p):
 
 def summarize_continuous(df, var, group, groups):
     x_all = pd.to_numeric(df[var], errors="coerce")
-    normal = is_normal(x_all)
+    if x_all.notna().sum() == 0:
+        print(f"⚠️ 变量 {var!r} 指定为连续但无有效数值（可能类型指定反了）——已跳过。")
+        return None
+    # 逐组分别判正态：组间均值差异大时，合并数据会呈双峰而被误判为非正态，
+    # 从而把本该 t 检验的正态变量错切成非参数。各组都正态才按正态处理。
+    if group:
+        per_group = [pd.to_numeric(df.loc[df[group] == g, var], errors="coerce") for g in groups]
+        normal = all(is_normal(x) for x in per_group if x.notna().sum() > 0)
+    else:
+        normal = is_normal(x_all)
     row = {"变量": f"{var}" + ("（均数±SD）" if normal else "（中位数[IQR]）")}
     cells = []
     for g in groups:
@@ -78,7 +87,7 @@ def summarize_continuous(df, var, group, groups):
         except Exception:
             p = None
     row["P"] = fmt_p(p)
-    row["检验"] = ("" if not group else
+    row["检验"] = ("" if not group or len(groups) < 2 else
                    ("t/Welch" if normal and len(groups) == 2 else
                     "ANOVA" if normal else
                     "Mann-Whitney" if len(groups) == 2 else "Kruskal-Wallis"))
@@ -100,6 +109,9 @@ def summarize_categorical(df, var, group, groups):
             else:
                 p = p_chi
                 test = "卡方"
+                # RxC 表期望频数偏低时卡方近似不可靠——scipy 无 Fisher-Freeman-Halton，如实标注。
+                if (expected < 5).any():
+                    test = "卡方⚠期望<5"
         except Exception:
             p, test = None, ""
     header = {"变量": f"{var}, n(%)"}
@@ -130,11 +142,18 @@ def main():
     ap.add_argument("--out", default="outputs/table1.csv")
     args = ap.parse_args()
 
-    df = pd.read_csv(args.input) if args.input.lower().endswith(".csv") else pd.read_excel(args.input)
+    try:
+        df = pd.read_csv(args.input) if args.input.lower().endswith(".csv") else pd.read_excel(args.input)
+    except Exception as e:
+        sys.exit(f"读不了输入文件 {args.input}：{e}（确认是有内容的 CSV/Excel）")
+    if df.empty or len(df.columns) == 0:
+        sys.exit("输入文件没有数据。")
     group = args.group
     if group and group not in df.columns:
         sys.exit(f"分组列 {group!r} 不在数据里。可用列：{list(df.columns)}")
     groups = sorted(df[group].dropna().unique().tolist()) if group else ["总体"]
+    if group and len(groups) < 2:
+        print(f"⚠️ 分组列 {group!r} 只有 1 个取值，不会做组间检验（只出各变量描述）。")
 
     cont = [c.strip() for c in args.continuous.split(",") if c.strip()]
     cat = [c.strip() for c in args.categorical.split(",") if c.strip()]
@@ -146,6 +165,14 @@ def main():
                 cont.append(c)
             else:
                 cat.append(c)
+    else:
+        # 显式指定时做合理性检查，防用反
+        for c in cont:
+            if c in df.columns and not pd.api.types.is_numeric_dtype(pd.to_numeric(df[c], errors="coerce")):
+                print(f"⚠️ {c!r} 被指定为连续变量，但转不成数值——可能类型指定反了。")
+        for c in cat:
+            if c in df.columns and df[c].nunique() > 20:
+                print(f"⚠️ {c!r} 被指定为分类变量，但有 {df[c].nunique()} 个不同取值——可能应是连续变量。")
 
     out_rows = []
     # 首行：各组 n
@@ -158,7 +185,9 @@ def main():
 
     for v in cont:
         if v in df.columns:
-            out_rows.append(summarize_continuous(df, v, group, groups))
+            r = summarize_continuous(df, v, group, groups)
+            if r is not None:
+                out_rows.append(r)
     for v in cat:
         if v in df.columns:
             out_rows.extend(summarize_categorical(df, v, group, groups))
