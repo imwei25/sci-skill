@@ -16,7 +16,6 @@ openpyxl
 requests
 httpx
 metapub            # NCBI/PubMed 元数据 + FindIt 找可下载 PDF
-pymed              # PubMed 简洁封装
 biopython          # import 名为 Bio；Entrez eutils
 habanero           # Crossref REST 客户端
 pyalex             # OpenAlex 客户端

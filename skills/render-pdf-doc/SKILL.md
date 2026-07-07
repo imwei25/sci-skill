@@ -13,7 +13,7 @@ tools: Read, Write, Edit, Bash, Grep, Glob
 model: inherit
 ---
 
-> **本仓库运行环境（先读）**：Python 用 `.venv/Scripts/python.exe`（项目根 `.venv`；没有先跑 `env-setup` 技能）；本技能脚本在 `skills/render-pdf-doc/` 下，运行时先 `cd` 到该目录或用全路径；产出写仓库根 `outputs/`。需要 **pandoc + xelatex**（仓库根 install.ps1 -WithPdf / install.sh --with-pdf 已装）；先跑 `bash scripts/check_deps.sh` 自检。**中文稿件必须加 `--cjk-font "Microsoft YaHei"`（服务器用 `Noto Sans CJK SC`）**，否则默认 Malgun Gothic 不含汉字会漏字。以下为上游技能原文（vendored，未改方法论）。
+> **本仓库运行环境（先读）**：Python 用 `.venv/Scripts/python.exe`（Windows）/ `.venv/bin/python`（Linux/macOS）（项目根 `.venv`；没有先跑 `env-setup` 技能）；本技能脚本在 `skills/render-pdf-doc/` 下，运行时先 `cd` 到该目录或用全路径；产出写仓库根 `outputs/`。需要 **pandoc + xelatex**（仓库根 install.ps1 -WithPdf / install.sh --with-pdf 已装）；先跑 `bash scripts/check_deps.sh` 自检。**中文稿件必须加 `--cjk-font "Microsoft YaHei"`（服务器用 `Noto Sans CJK SC`）**，否则默认 Malgun Gothic 不含汉字会漏字。以下为上游技能原文（vendored，未改方法论）。
 
 # Render-PDF-Doc Skill
 
