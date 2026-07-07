@@ -9,7 +9,8 @@ description: 用于任何数据分析、统计计算、画图、读写 CSV/Excel
 
 ## 解释器
 ```
-.venv\Scripts\python.exe
+.venv/Scripts/python.exe   # Windows（正斜杠写法，bash 与 PowerShell 都能用）
+.venv/bin/python           # Linux / macOS
 ```
 已安装：pandas、numpy、scipy、matplotlib、scikit-learn、seaborn、statsmodels、openpyxl，另有 lifelines（生存分析）等。
 
@@ -18,7 +19,7 @@ description: 用于任何数据分析、统计计算、画图、读写 CSV/Excel
 ## 运行方式
 把代码写到一个 `.py` 文件，再用 bash 执行：
 ```
-.venv\Scripts\python.exe analysis.py
+.venv/Scripts/python.exe analysis.py
 ```
 
 ## 约定

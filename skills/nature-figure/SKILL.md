@@ -6,7 +6,7 @@ version: 2.0.0
 author: Community contribution, refactored into static/dynamic layers
 ---
 
-> **本仓库运行环境（先读）**：Python 用 `.venv\Scripts\python.exe`（项目根 `.venv`；没有先跑 `env-setup` 技能）；本技能脚本在 `skills/nature-figure/` 下，运行时先 `cd` 到该目录或用全路径；产出写仓库根 `outputs/`。默认用 **Python 后端**（matplotlib/seaborn 已装），除非用户明确要 R；不使用 OpenRouter 图像路线。以下为上游技能原文（vendored，未改方法论）。
+> **本仓库运行环境（先读）**：Python 用 `.venv/Scripts/python.exe`（项目根 `.venv`；没有先跑 `env-setup` 技能）；本技能脚本在 `skills/nature-figure/` 下，运行时先 `cd` 到该目录或用全路径；产出写仓库根 `outputs/`。默认用 **Python 后端**（matplotlib/seaborn 已装），除非用户明确要 R；不使用 OpenRouter 图像路线。以下为上游技能原文（vendored，未改方法论）。
 
 # Nature Figure Making — Router
 

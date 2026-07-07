@@ -22,7 +22,7 @@ import time
 try:
     import requests
 except ImportError:
-    sys.exit("缺少 requests，请运行一键安装脚本 scripts/setup.ps1")
+    sys.exit("缺少 requests：请先在仓库根运行 install.ps1（Windows）/ install.sh（Linux/macOS），或让 agent 运行 env-setup 技能")
 
 EPMC = "https://www.ebi.ac.uk/europepmc/webservices/rest/search"
 UA = {"User-Agent": "sci-agent-literature-review/1.0"}

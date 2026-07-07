@@ -11,7 +11,7 @@
 | `render-pdf-doc` | [Aperivue/medsci-skills](https://github.com/Aperivue/medsci-skills) | `skills/render-pdf-doc` | MIT | `b71f3ba` (2026-07-06) |
 
 ## 我们做的改动（须按许可声明）
-1. 每个技能的 `SKILL.md` **顶部新增一段引用块**：说明本仓库的 Python 解释器（项目根 `.venv`（Windows `.venv\Scripts\python.exe` / Linux `.venv/bin/python`））、脚本目录 `skills/<name>/`、产出目录 `outputs/`。技能正文其余部分未改。
+1. 每个技能的 `SKILL.md` **顶部新增一段引用块**：说明本仓库的 Python 解释器（项目根 `.venv`（Windows `.venv/Scripts/python.exe` / Linux `.venv/bin/python`））、脚本目录 `skills/<name>/`、产出目录 `outputs/`。技能正文其余部分未改。
 2. `nature-figure`：删除了 `assets/`（约 30MB 的示例图库 chart-atlas/figures4papers/gallery），仅保留 `SKILL.md / manifest.yaml / static / references / scripts / evals`。因此 `references/demos.md` 里指向 figures4papers 的示例图链接会失效——对无界面文本 Agent 无影响。
 3. `search-lit` / `fulltext-retrieval`：删除了 `*_challenge/` 与 `tests/` 测试夹具，保留 SKILL.md 与运行脚本。
 
@@ -28,7 +28,7 @@
 - `nature-figure`：matplotlib / seaborn（Python 后端，已装）。R 后端为可选，未装。OpenRouter 图像路线需自备 key，默认不用。
 - `fulltext-retrieval`：`pymupdf` + `pymupdf4llm`（PDF→Markdown）；核心走 OA API（Unpaywall/PMC/OpenAlex/Crossref）。
 - `search-lit`：PubMed E-utilities / Semantic Scholar（走 `requests`）。
-- `render-pdf-doc`：**pandoc + xelatex**（一键脚本用 winget(Windows)/apt(Linux) 装；Docker 见 deploy/Dockerfile）。
+- `render-pdf-doc`：**pandoc + xelatex**（一键脚本用 winget(Windows)/apt(Linux) 装）。
 
 ## 已知环境注意（实测）
 - **render-pdf-doc 中文漏字**：脚本默认 CJK 字体是 Malgun Gothic（韩文），不含中文汉字。**中文稿件必须传 `--cjk-font "Microsoft YaHei"`（Windows）/ `Noto Sans CJK SC`（Linux）**，否则汉字被静默丢弃。英文/排版正常。MiKTeX **首次**渲染会自动联网补装宏包（bigintcalc 等），需先 `miktex packages update` 一次。
