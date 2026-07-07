@@ -50,19 +50,26 @@ case "$(uname -s)" in
   MINGW*|MSYS*|CYGWIN*)
     _win="$(cygpath -u "${WINDIR:-}" 2>/dev/null || printf '%s' "${WINDIR:-}")"
     [[ -z "$_win" ]] && _win="/c/Windows"
-    if [[ -f "$_win/Fonts/malgun.ttf" ]]; then
-      echo "[OK] Malgun Gothic (Windows)"
+    # Chinese is the primary target here: Microsoft YaHei (msyh.ttc) is the default
+    # for Han text. Malgun Gothic is only needed for Korean documents.
+    if [[ -f "$_win/Fonts/msyh.ttc" || -f "$_win/Fonts/msyh.ttf" ]]; then
+      echo "[OK] Microsoft YaHei (Windows, Chinese)"
       ok=$((ok + 1))
     else
-      echo "[WARN] Malgun Gothic not detected — it ships with Windows 7+; see C:\\Windows\\Fonts"
+      echo "[WARN] Microsoft YaHei (msyh.ttc) not detected — it ships with Windows; see C:\\Windows\\Fonts"
+    fi
+    if [[ -f "$_win/Fonts/malgun.ttf" ]]; then
+      echo "[OK] Malgun Gothic (Windows, Korean)"
+    else
+      echo "[INFO] Malgun Gothic (Korean) not detected — only needed for Korean docs"
     fi
     ;;
   *)
-    if fc-list 2>/dev/null | grep -qi "Noto.*CJK.*KR"; then
-      echo "[OK] Noto Sans/Serif CJK KR"
+    if fc-list 2>/dev/null | grep -qiE "Noto.*CJK.*(SC|KR)"; then
+      echo "[OK] Noto Sans/Serif CJK (SC/KR)"
       ok=$((ok + 1))
     else
-      echo "[MISS] Noto CJK KR — apt install fonts-noto-cjk"
+      echo "[MISS] Noto CJK — apt install fonts-noto-cjk"
       fail=$((fail + 1))
     fi
     ;;

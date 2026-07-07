@@ -12,7 +12,7 @@ tools: Read, Write, Edit, Bash, Grep, Glob
 model: inherit
 ---
 
-> **本仓库运行环境（先读）**：Python 用 `.venv/Scripts/python.exe`（Windows）/ `.venv/bin/python`（Linux/macOS）（项目根 `.venv`；没有先跑 `env-setup` 技能）；本技能脚本在 `skills/render-pdf-doc/` 下，运行时先 `cd` 到该目录或用全路径；产出写仓库根 `outputs/`。需要 **pandoc + xelatex**（仓库根 install.ps1 -WithPdf / install.sh --with-pdf 已装）；先跑 `bash scripts/check_deps.sh` 自检。**中文稿件必须加 `--cjk-font "Microsoft YaHei"`（服务器用 `Noto Sans CJK SC`）**，否则默认 Malgun Gothic 不含汉字会漏字。以下为上游技能原文（vendored，未改方法论）。
+> **本仓库运行环境（先读）**：Python 用 `.venv/Scripts/python.exe`（Windows）/ `.venv/bin/python`（Linux/macOS）（项目根 `.venv`；没有先跑 `env-setup` 技能）；本技能脚本在 `skills/render-pdf-doc/` 下，运行时先 `cd` 到该目录或用全路径；产出写仓库根 `outputs/`。需要 **pandoc + xelatex**（仓库根 install.ps1 -WithPdf / install.sh --with-pdf 已装）；先跑 `bash scripts/check_deps.sh` 自检。**中文字体已自动处理**：`render_pdf.sh` 会扫描稿件，含汉字时默认用 Microsoft YaHei（Windows）/ Noto Sans CJK SC（Linux）/ PingFang SC（macOS），含韩文时用 Malgun Gothic / Noto CJK KR / Apple SD Gothic Neo——无需再手动加 `--cjk-font`。若 frontmatter 里写了 `CJKmainfont`，脚本会尊重它、不再覆盖。以下为上游技能原文（vendored，方法论未改；字体默认与 `redact_internal` 已按本仓库需求修正）。
 
 # Render-PDF-Doc Skill
 
@@ -38,8 +38,8 @@ Manual fixes work but the same pattern recurs across proposals, briefings, IRB c
 ## Core Principles
 
 1. **Pipe table column widths must be inferred from content.** No equal splitting. Size the first column (label) to the longest label, and distribute the remaining width content-proportionally across the data columns.
-2. **Set the CJK font explicitly** — `mainfont` + `CJKmainfont`. The default fallback is OS-detected.
-3. **For circulation PDFs, remove change history / version numbers / PI attribution** (or split them into a supplementary). Use the frontmatter `redact_internal: true` option.
+2. **CJK font is auto-selected by content** — the script detects Han vs Hangul and picks a covering font per OS (Chinese → Microsoft YaHei / Noto Sans CJK SC / PingFang SC; Korean → Malgun Gothic / Noto CJK KR / Apple SD Gothic Neo). Set `mainfont` / `CJKmainfont` in frontmatter only to override; the script will not clobber a frontmatter font with `-V`.
+3. **For circulation PDFs, remove change history / version numbers / PI attribution** — set frontmatter `redact_internal: true` and the script strips those lines before rendering.
 4. **No Quarto dependency** — raw pandoc + xelatex. Quarto's `tbl-colwidths` has reported PDF regressions (issues 6089/9200).
 
 ## Dependencies
@@ -55,7 +55,7 @@ sudo apt-get install pandoc texlive-xetex texlive-lang-cjk fonts-noto-cjk
 # Windows (PowerShell) — run in Git Bash afterwards
 winget install --id JohnMacFarlane.Pandoc
 winget install --id MiKTeX.MiKTeX          # xelatex; installs missing LaTeX packages on demand
-# No CJK font download needed: Malgun Gothic ships with Windows 7+ and is the default here.
+# No CJK font download needed: Microsoft YaHei (Chinese) + Malgun Gothic (Korean) both ship with Windows.
 ```
 
 Detection:
@@ -68,8 +68,9 @@ bash scripts/check_deps.sh
 so `xelatex` can read as `[MISS]` even after install. Both `check_deps.sh` and
 `render_pdf.sh` now auto-probe that location; if `xelatex` still isn't found, add the
 directory to your `PATH` (or run from the *MiKTeX Console → Settings*-configured shell).
-The Windows CJK/main font default is **Malgun Gothic** (preinstalled); override per document
-via frontmatter, or with `--font` / `--cjk-font`.
+The Windows CJK/main font default is **content-detected**: Microsoft YaHei (msyh.ttc,
+preinstalled) for Chinese, Malgun Gothic for Korean. Override per document via frontmatter,
+or with `--font` / `--cjk-font`.
 
 ## Workflow
 
@@ -89,7 +90,7 @@ colorlinks: true
 ---
 ```
 
-For Linux/CI, use `Noto Sans CJK KR`; on Windows, use `Malgun Gothic`. The render script auto-detects the default per OS.
+The render script auto-detects the default per OS **and per script** (Chinese vs Korean) — the frontmatter above is only needed to override. For a Chinese doc on Windows the default is `Microsoft YaHei`; on Linux, `Noto Sans CJK SC`.
 
 ### Step 2 — Infer column widths
 

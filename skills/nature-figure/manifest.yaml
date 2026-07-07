@@ -79,5 +79,8 @@ references:
       path: references/tutorials.md
     - condition: "radar, 3D sphere, fill_between, scatter patterns"
       path: references/chart-types.md
-    - condition: bundled figures4papers Python scripts and output previews for concrete pattern adaptation
+    # NOTE: the figures4papers asset gallery (assets/) is NOT bundled in this repo
+    # (stripped to keep it lightweight). demos.md now describes patterns in prose;
+    # do not try to Read files under assets/ — they do not exist here.
+    - condition: figures4papers-style pattern descriptions (prose only; asset gallery not bundled)
       path: references/demos.md

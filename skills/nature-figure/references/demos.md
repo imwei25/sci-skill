@@ -1,12 +1,13 @@
 # figures4papers Demo Index
 
-Use this file when a user asks for a `figures4papers` look, cites the older
-`scientific-figure-making` skill, or needs a concrete Python/matplotlib example
-instead of only abstract style rules.
+> ⚠️ **本仓库未打包示例资源**：为保持轻量，上游 `assets/figures4papers/` 图库（约 30MB 的
+> `plot_*.py` 与预览图）**未随本仓库分发**。下文把每类图的**做法要点**用文字描述，照描述用
+> matplotlib 复现即可——**不要尝试 Read `../assets/...` 下的文件，它们在本仓库不存在**。需要原始
+> 示例文件可去上游 Yuan1z0825/nature-skills 获取。
 
-The bundled examples live under `../assets/figures4papers/`. They are reference
-materials for the Python track only. Keep the normal `nature-figure` contract first:
-define the scientific claim, pick Python or R, and only then adapt a demo pattern.
+Use this file when a user asks for a `figures4papers` look or needs a concrete
+Python/matplotlib pattern instead of only abstract style rules. Keep the normal
+`nature-figure` contract first: define the scientific claim, then adapt a pattern below.
 
 ## How to use the demos
 

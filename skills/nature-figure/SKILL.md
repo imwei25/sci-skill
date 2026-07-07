@@ -1,12 +1,14 @@
 ---
 name: nature-figure
 description: >-
-  Submission-grade Nature/high-impact journal figure workflow for Python or R, plus optional OpenRouter GPT Image 2 manuscript schematic generation when the user explicitly asks for AI-generated graphical abstracts, concept schematics, mechanism diagrams, or paper schematic illustrations. Use whenever the user asks to create, revise, audit, or polish manuscript figures, multi-panel scientific plots, figures4papers-style matplotlib plots, journal-ready SVG/PDF/TIFF outputs, or OpenRouter/API-generated schematic drafts, especially for Nature-family or other high-impact journals. Before plotting or image generation, define the figure's conclusion, evidence logic, export needs, and review risks. For plotting tasks, honor an explicit Python/R choice, otherwise reuse the saved nature-figure backend preference; if no preference exists, ask once whether the user prefers Python or R and save that answer for future calls. For explicit OpenRouter/GPT Image 2 schematic generation, do not ask Python or R; use the AI-schematic route. Supports matplotlib/seaborn, ggplot2/patchwork/ComplexHeatmap, and OpenRouter Images API drafts. Not for dashboards or Illustrator/Figma-first infographics. Also trigger on general academic-writing figure needs even without the word "Nature", such as making figures/plots for a paper, scientific/academic plotting, data visualization for a manuscript, AI-generated paper schematics, and Chinese phrasings like 论文配图、学术写作配图、科研绘图、科研作图、画图、作图、出图、论文图表、可视化、论文示意图、机制示意图、图形摘要.
-version: 2.0.0
-author: Community contribution, refactored into static/dynamic layers
+  Submission-grade Nature/high-impact journal figure workflow (Python matplotlib/seaborn or R ggplot2), plus an optional OpenRouter GPT Image schematic route when the user explicitly asks for an AI-generated graphical abstract, concept schematic, or mechanism diagram. Use whenever the user asks to create, revise, audit, or polish manuscript figures, multi-panel scientific plots, forest/KM/volcano plots, or journal-ready SVG/PDF/TIFF outputs. Before plotting, define the figure's conclusion, evidence logic, export needs, and review risks. Backend defaults to Python (installed); only use R when the user explicitly asks. Not for dashboards or Illustrator/Figma infographics. Also triggers on general academic figure needs without the word "Nature", including Chinese phrasings: 论文配图、科研绘图、科研作图、画图、作图、出图、论文图表、可视化、论文示意图、机制示意图、图形摘要、森林图、生存曲线、KM 曲线、火山图.
+version: 2.1.0
+author: Community contribution (nature-skills); repo-adapted backend/default policy
 ---
 
-> **本仓库运行环境（先读）**：Python 用 `.venv/Scripts/python.exe`（Windows）/ `.venv/bin/python`（Linux/macOS）（项目根 `.venv`；没有先跑 `env-setup` 技能）；本技能脚本在 `skills/nature-figure/` 下，运行时先 `cd` 到该目录或用全路径；产出写仓库根 `outputs/`。默认用 **Python 后端**（matplotlib/seaborn 已装），除非用户明确要 R；不使用 OpenRouter 图像路线。以下为上游技能原文（vendored，未改方法论）。
+> **本仓库运行环境（先读）**：Python 用 `.venv/Scripts/python.exe`（Windows）/ `.venv/bin/python`（Linux/macOS）（项目根 `.venv`；没有先跑 `env-setup` 技能）；本技能脚本在 `skills/nature-figure/` 下，运行时先 `cd` 到该目录或用全路径；产出写仓库根 `outputs/`。
+>
+> **本仓库后端策略（覆盖下方 vendored 正文的"必须问一次 Python or R"）**：默认直接用 **Python 后端**（matplotlib/seaborn 已装，R 后端未装）。**不要**为了选后端而停下来问用户——除非用户在请求里明确说要 R。因此下方 "Resolve the backend — a blocking gate" 一节在本仓库简化为：无明确 R 要求 → 直接 Python，跳过提问。默认不使用 OpenRouter 图像路线（需自备 key）。以下为上游技能原文（vendored，方法论未改）。
 
 # Nature Figure Making — Router
 

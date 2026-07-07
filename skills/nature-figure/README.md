@@ -1,5 +1,11 @@
 # `nature-figure` 技能
 
+> ⚠️ **关于本 README 里的裂图**：为保持仓库轻量，上游约 30MB 的示例图库（`assets/gallery/`、
+> `assets/chart-atlas/`、`assets/figures4papers/`）**未随本仓库分发**，因此下方图库/图集表格里的
+> 预览图会显示为裂图——这是预期的，不影响技能功能（纯文本 Agent 不需要这些预览图）。需要原始示例
+> 可去上游 [Yuan1z0825/nature-skills](https://github.com/Yuan1z0825/nature-skills) 获取。本仓库
+> **默认走 Python 后端**（matplotlib/seaborn 已装），不会为选后端而停下来问；用户明确要 R 时才用 R。
+
 `nature-figure` 用于生成可投稿级科研图，面向 Nature 级期刊和高影响力学术场景，同时支持 Python 与 R 两条绘图路径。若用户明确需要 AI 生成论文示意图、机制图或 graphical abstract，也支持通过 OpenRouter Images API 调用 `openai/gpt-image-2` 生成概念示意图草稿。
 
 该技能从“图件契约”开始，而不是直接套模板。开始绘图前，必须明确核心结论、证据层级、图件原型、后端选择、期刊与导出约束、统计说明和 source-data 可追溯性。第一次使用绘图路径时，用户选择 Python 或 R 后会写入默认偏好；后续默认沿用该后端，除非用户明确切换。只有在科学逻辑明确后，才使用绘图模板。
