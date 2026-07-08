@@ -33,8 +33,10 @@ try:
 except Exception:
     pass
 
-ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-WS = os.path.join(ROOT, "workspace")
+# 工作区放在**当前工作目录**下的 workspace/（与"产出写项目根 outputs/"约定一致）。
+# 这样技能即便被复制到 ~/.claude/skills 单独加载，workspace 仍落在用户当前项目里，
+# 而不是技能安装目录。可用环境变量 SCI_WORKSPACE 覆盖。
+WS = os.environ.get("SCI_WORKSPACE") or os.path.join(os.getcwd(), "workspace")
 
 # 预置流水线：每步 = (技能, 默认产物相对路径)。sci-pilot 据此建骨架。
 PIPELINES = {
@@ -73,12 +75,15 @@ SUBDIRS = ["search", "fulltext", "analysis", "figures", "drafts", "checks", "fin
 
 
 def slugify(s):
-    s = re.sub(r"[^\w\-]+", "-", (s or "").strip().lower())
+    # ASCII 化到安全字符集：去掉 / \ . 等（顺带杜绝 ../ 路径穿越），中文/空格转连字符。
+    s = re.sub(r"[^\w\-]+", "-", (s or "").strip().lower(), flags=re.UNICODE)
     return re.sub(r"-+", "-", s).strip("-") or "project"
 
 
 def proj_dir(slug):
-    return os.path.join(WS, slug)
+    # 所有命令统一 slugify（init/set/show/path 一致），既修中文/空格 slug 找不到的问题，
+    # 也让 --slug "../../x" 这类穿越尝试被 slugify 消解在 workspace/ 内。
+    return os.path.join(WS, slugify(slug))
 
 
 def manifest_path(slug):
@@ -95,8 +100,12 @@ def load(slug):
 
 def save(slug, m):
     os.makedirs(proj_dir(slug), exist_ok=True)
-    with open(manifest_path(slug), "w", encoding="utf-8") as f:
+    # 原子写：先写临时文件再 replace，写一半崩了也不会毁掉原 manifest。
+    p = manifest_path(slug)
+    tmp = p + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
         json.dump(m, f, ensure_ascii=False, indent=2)
+    os.replace(tmp, p)
 
 
 def recompute_next(m):
@@ -111,6 +120,12 @@ def cmd_init(a):
     slug = slugify(a.slug)
     if a.pipeline not in PIPELINES:
         sys.exit(f"未知流水线 {a.pipeline!r}，可选：{', '.join(PIPELINES)}")
+    # 拒绝覆盖已有课题的进度——这是 sci-pilot 断点续跑的命根子。
+    if os.path.isfile(manifest_path(slug)) and not a.force:
+        m0 = load(slug)
+        done = sum(1 for s in m0["steps"] if s["status"] == "done")
+        sys.exit(f"课题 {slug!r} 已存在（进度 {done}/{len(m0['steps'])}，next={m0['next']}）。"
+                 f"续跑请直接 show/set，不要 init；确要清空重来加 --force。")
     topic = {}
     if a.topic:
         try:
@@ -205,6 +220,7 @@ def main():
     p.add_argument("--pipeline", required=True, choices=list(PIPELINES))
     p.add_argument("--topic", default="", help="JSON，如 '{\"P\":\"HFpEF\"}'")
     p.add_argument("--date", default="", help="创建日期(ISO)，主控传入（脚本不取系统时间）")
+    p.add_argument("--force", action="store_true", help="课题已存在时清空重来（危险，会丢进度）")
     p.set_defaults(func=cmd_init)
 
     p = sub.add_parser("show")

@@ -37,7 +37,7 @@ workspace/<slug>/
 ## 状态机（workspace.py 子命令）
 | 命令 | 作用 |
 |---|---|
-| `init --slug --goal --pipeline [--topic JSON] [--date]` | 建工作区 + 子目录 + 骨架 manifest（按流水线预置步骤与默认产物路径） |
+| `init --slug --goal --pipeline [--topic JSON] [--date]` | 建工作区 + 子目录 + 骨架 manifest（按流水线预置步骤与默认产物路径）。**课题已存在时会拒绝、防止清空已有进度**——续跑请直接 show/set；确要清空重来才加 `--force` |
 | `path --slug --step` | 打印某步产物应写到的相对路径（`workspace/<slug>/...`），作为该技能 `--out` |
 | `set --slug --step --status [--out] [--n]` | 更新某步状态并自动推进 `next` |
 | `show --slug [--json]` | 打印进度（可选原始 JSON） |
@@ -50,6 +50,7 @@ workspace/<slug>/
 4. "继续上次"：`list` 找到课题 → `show` 看 `next` → 从 `next` 续跑。
 
 ## 传递规则
-- **只传路径不传内容**：上一步产物（如 43 篇证据表 CSV）以文件路径交给下一步，不把整表读进上下文。
+- **大产物只传路径不传内容**：脚本类产物（43 篇证据表 CSV、下好的 PDF、图片）以文件路径交给下一步，不把整表/整库读进上下文。纯 prompt 技能（如 write-paper 读综述稿再改）仍需读入文本内容——"只传路径"主要针对大数据文件与脚本产物，不是说任何东西都不读。
+- **slug 一致性**：所有命令内部统一 slugify（中文/空格→连字符），所以 `init` 和后续 `show/set/path` 传同一个原始 `--slug` 都能对上；`../` 之类穿越尝试会被 slugify 消解在 `workspace/` 内。
 - 各技能脚本都接受产物路径参数（`search.py --outdir`、`verify_refs.py --outdir`、`table1.py --out`、`deidentify.py --out`、`fetch_oa.py -o`、`render_*.sh -o`…）；纯 prompt 技能在指令里写明"写到 workspace/<slug>/drafts/xxx.md"。
 - 单独用某个技能、不建工作区时，技能仍回退到仓库根 `outputs/`（向后兼容，行为不变）。
