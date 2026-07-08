@@ -166,6 +166,26 @@ def _verdict_with_meta(v, base_note, entry, meta):
     return v, base_note
 
 
+def _id_failed(kind, id_str, claimed, entry):
+    """某个 DOI/PMID 查不到时：**按标题反查一次**。
+    经常遇到"论文真实存在、但 DOI 是 AI 编造的"——直接判 FABRICATED 会冤枉真论文。
+    标题查到强匹配 → ID_FAKE（真论文+假号，附上正确标识供替换）；否则才 FABRICATED。"""
+    if claimed:
+        ft, tsim, tmeta = title_search(claimed)
+        if ft and tsim >= 0.85:
+            real_doi = (tmeta or {}).get("doi") or ""
+            real_pmid = (tmeta or {}).get("pmid") or ""
+            correct = (f"DOI:{real_doi}" if real_doi else
+                       (f"PMID:{real_pmid}" if real_pmid else "见下方匹配到的文献"))
+            return dict(verdict="ID_FAKE", id=id_str, found_title=ft, sim=round(tsim, 2),
+                        note=f"此 {kind} 查无（疑似 AI 伪造），但按标题查到真实文献——正确标识 {correct}；"
+                             f"用正确 {kind} 替换即可", **entry)
+        return dict(verdict="FABRICATED", id=id_str, found_title=ft or "", sim=round(tsim, 2),
+                    note=f"{kind} 查无，且按标题也查不到匹配——疑似整条虚构，请人工确认", **entry)
+    return dict(verdict="FABRICATED", id=id_str, found_title="", sim=0.0,
+                note=f"{kind} 查无（不存在），且无标题可反查——请人工确认", **entry)
+
+
 def verify_one(entry):
     """entry: {'raw','claimed_title','doi','pmid',...} -> 结果 dict。"""
     claimed = entry.get("claimed_title", "")
@@ -174,8 +194,7 @@ def verify_one(entry):
         if doi:
             rt, meta = resolve_doi(doi)
             if rt is None:
-                return dict(verdict="FABRICATED", id=f"doi:{doi}", found_title="",
-                            sim=0.0, note="DOI 无法解析（不存在）", **entry)
+                return _id_failed("DOI", f"doi:{doi}", claimed, entry)
             sim = title_sim(claimed, rt) if claimed else 1.0
             v = "OK" if (not claimed or sim >= 0.85) else (
                 "MISMATCH" if sim < 0.6 else "CHECK")
@@ -187,8 +206,7 @@ def verify_one(entry):
         if pmid:
             rt, meta = resolve_pmid(pmid)
             if rt is None:
-                return dict(verdict="FABRICATED", id=f"pmid:{pmid}", found_title="",
-                            sim=0.0, note="PMID 不存在", **entry)
+                return _id_failed("PMID", f"pmid:{pmid}", claimed, entry)
             sim = title_sim(claimed, rt) if claimed else 1.0
             v = "OK" if (not claimed or sim >= 0.85) else (
                 "MISMATCH" if sim < 0.6 else "CHECK")
@@ -292,7 +310,8 @@ def main():
         w.writerows(results)
 
     # Markdown 报告（按风险排序）
-    order = {"FABRICATED": 0, "NOT_FOUND": 1, "MISMATCH": 2, "CHECK": 3, "ERROR": 4, "OK": 5}
+    order = {"FABRICATED": 0, "ID_FAKE": 1, "NOT_FOUND": 2, "MISMATCH": 3,
+             "CHECK": 4, "ERROR": 5, "OK": 6}
     results.sort(key=lambda r: order.get(r["verdict"], 9))
     from collections import Counter
     dist = Counter(r["verdict"] for r in results)
@@ -305,7 +324,7 @@ def main():
             if r["found_title"] and r["found_title"] != r["claimed_title"]:
                 f.write(f"  - 实际匹配到：{r['found_title']}\n")
 
-    bad = sum(dist.get(k, 0) for k in ("FABRICATED", "NOT_FOUND", "MISMATCH"))
+    bad = sum(dist.get(k, 0) for k in ("FABRICATED", "ID_FAKE", "NOT_FOUND", "MISMATCH"))
     print("-" * 50)
     print(f"结果：{dict(dist)}")
     print(f"可疑/存疑 {bad} 条。报告见 {args.outdir}/reference_check.md / .csv")
