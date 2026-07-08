@@ -20,7 +20,7 @@
 | 按 DOI 下全文 PDF | `fulltext-retrieval` | — |
 | 查假引用（真伪，非"是否支持论断"） | `reference-check` | — |
 | 找空白、提假设、选题打分 | `topic-selection` | — |
-| 严格新颖性裁定 + 预注册锁（防 HARKing） | `research-design` | 只发散选题→topic-selection |
+| 严格新颖性裁定 + 预注册锁（防 HARKing） | `novelty-check` | 只发散选题→topic-selection |
 | 写国自然/NIH 标书 | `grant-proposal` | 评审→peer-review |
 | 写原创研究论文 IMRaD | `write-paper` | 综述→literature-review |
 | 通用数据分析/建模 | `data-analysis` | Table1/样本量→clinical-stats |

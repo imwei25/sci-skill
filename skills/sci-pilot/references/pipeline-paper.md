@@ -4,7 +4,7 @@
 
 ## 步骤
 1. **对齐（停下问用户）**：研究类型（RCT/队列/病例对照/诊断/动物…）、目标期刊、语言、手上材料（数据文件/已跑统计/图/前期文献）。写进 `topic`。
-   - **前瞻性研究、数据尚未采集**：先走 `research-design`（新颖性裁定 + 预注册锁，采数前冻结假设与主分析计划）→ `checks/novelty_assessment.md` + `drafts/preregistration.md`。数据已存在的回顾性分析可略过预注册，但新颖性裁定仍建议做。
+   - **前瞻性研究、数据尚未采集**：先走 `novelty-check`（新颖性裁定 + 预注册锁，采数前冻结假设与主分析计划）→ `checks/novelty_assessment.md` + `drafts/preregistration.md`。数据已存在的回顾性分析可略过预注册，但新颖性裁定仍建议做。
 2. **脱敏（若含患者数据，必做，停下确认）**：数据含姓名/身份证/住院号等 → 先 `deidentify` → `analysis/data_deid.csv`。**未脱敏不进入分析**。映射表单独保管。
 3. **统计（自动）**：
    - `clinical-stats` 出 Table 1 基线特征表（按变量类型自动选检验）→ `analysis/table1.csv`；需要样本量依据时同样用它（先验，别做 post-hoc power）。
