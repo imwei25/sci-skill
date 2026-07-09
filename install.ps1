@@ -176,6 +176,17 @@ if ($LinkClaude) {
   }
 }
 
+# 4b) router: mirror AGENTS.md into the project-root CLAUDE.md (managed block) for Claude Code.
+#     Project-scoped on purpose -- never touches the machine-global ~/.claude/CLAUDE.md.
+$router = Join-Path $Root "AGENTS.md"
+if (Test-Path $router) {
+  & $Py (Join-Path $Root "scripts\install_router.py") $router (Join-Path $Root "CLAUDE.md")
+  if ($LASTEXITCODE -eq 0) { Step "Router" $true  "project-root CLAUDE.md written (managed block) for Claude Code; AGENTS.md serves OpenCode" }
+  else                     { Step "Router" $false "install_router.py failed (exit $LASTEXITCODE)" }
+} else {
+  Step "Router" $false "AGENTS.md not found at project root ($Root)"
+}
+
 # 5) validate skills + environment
 try {
   & $Py (Join-Path $Root "scripts\validate_skills.py") --env

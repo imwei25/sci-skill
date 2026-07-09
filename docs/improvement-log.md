@@ -4,6 +4,14 @@
 
 ## 修复批次
 
+### 架构迁移 · sci-pilot 总控 → AGENTS.md 常驻主控（2026-07-09）
+
+**变更**
+- 删除 `sci-pilot` 技能：总控职责上移到常驻 `AGENTS.md`（判意图 → 选流水线 → 派发），套件从 21 技能（20+主控）变为 **20 技能**。各技能原「## 范围自检（先经 sci-pilot）」前言替换为「## 定位（顶层主控 AGENTS.md）」+「决策规约（§六 编号选项）」。
+- 状态模型 `workspace/<课题slug>/`（sci-pilot 维护、可续跑）→ `outputs/`（+ 会话专属目录），边做边汇报。
+- `AGENTS.md` 重写为完整 §一–§六 路由规范；`CLAUDE.md` 改为受管块，由新增的 `scripts/install_router.py` 从 `AGENTS.md` 生成（`install.ps1`/`install.sh` 增 router 步）。
+- 与主项目 scientific-discover 的 `.opencode/skills` 对齐，并带入其领先改进：`render-pdf-doc` 中文 ctex 版式、`render_docx.sh` 的 winget/pandoc 路径自探测、检索/核查脚本 stdout UTF-8、产物 CSV 去 BOM、`write-paper`「诊断/方法学研究可跳过 Table 1」提示、paper 流水线 `novelty-check` 数据已备时后置 + `literature-review` 前置于 `write-paper`。
+
 ### F1 · 全仓路径修复（已完成）
 
 **问题**

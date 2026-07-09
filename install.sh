@@ -97,6 +97,18 @@ if [ "$LINK_CLAUDE" = 1 ]; then
   step 0 "Claude Code skills" "$n skills copied to $target"
 fi
 
+# 4b) router: mirror AGENTS.md into the project-root CLAUDE.md (managed block) for Claude Code.
+#     Project-scoped on purpose -- never touches the machine-global ~/.claude/CLAUDE.md.
+if [ -f "$ROOT/AGENTS.md" ]; then
+  if "$PY" "$ROOT/scripts/install_router.py" "$ROOT/AGENTS.md" "$ROOT/CLAUDE.md"; then
+    step 0 "Router" "project-root CLAUDE.md written (managed block) for Claude Code; AGENTS.md serves OpenCode"
+  else
+    step 1 "Router" "install_router.py failed"
+  fi
+else
+  step 1 "Router" "AGENTS.md not found at project root ($ROOT)"
+fi
+
 # 5) validate skills + environment
 if "$PY" "$ROOT/scripts/validate_skills.py" --env; then
   step 0 "Self-check" "skills + environment validated"
